@@ -74,6 +74,16 @@ app.*.map.json
 **/ios/Flutter/flutter_export_environment.sh
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/Flutter/debug.xcconfig
+**/ios/Flutter/release.xcconfig
+**/ios/Flutter/flutter-debug.xcconfig
+**/ios/Flutter/flutter-release.xcconfig
+
+# CMake
+**/linux/flutter/generated_plugin_registrant.cc
+**/linux/flutter/generated_plugins.cmake
+**/windows/flutter/generated_plugin_registrant.cc
+**/windows/flutter/generated_plugins.cmake
 
 # macOS
 **/macos/Flutter/GeneratedPluginRegistrant.swift
