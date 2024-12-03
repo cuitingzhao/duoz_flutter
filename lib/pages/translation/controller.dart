@@ -15,7 +15,7 @@ class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
   late final AudioRecorder _audioRecorder;
   late final AudioUtils audioUtils;
-  late StreamController<List<int>> audioStreamController;
+  StreamController<List<int>>? audioStreamController;
   final _translationService = TranslationService();
   
   // 音频状态
@@ -46,6 +46,21 @@ class TranslationController extends GetxController {
         debugPrint('TranslationController: 检测到静音');
         if (isRecording.value) {
           stopRecordingAndTranslate();
+        }
+      },
+      onVolumeUpdate: (volume) {
+        // 计算与阈值的差值
+        final volumeDiff = volume - NoiseAnalyzer.noiseThreshold;
+        
+        if (volumeDiff <= 0) {
+          // 低于阈值时，保持一个很小的恒定值
+          currentVolume.value = 0.5;  // 5% 的基础振幅
+        } else {
+          // 高于阈值时，根据超出阈值的部分计算振幅
+          // 将超出部分映射到 5-100 的范围（保持最小 5% 的振幅）
+          final maxExcess = 80.0;  // 超出阈值 25dB 时达到最大振幅
+          final normalizedVolume = ((volumeDiff) / maxExcess * 15 + 5.0).clamp(5.0, 100.0);
+          currentVolume.value = normalizedVolume;
         }
       },
       silenceThreshold: NoiseAnalyzer.noiseThreshold,
@@ -96,7 +111,9 @@ class TranslationController extends GetxController {
   void onClose() {
     debugPrint('TranslationController: 关闭');
     _soundDetector.dispose();    
-    audioStreamController.close();
+      if (audioStreamController != null) {
+        audioStreamController!.close();
+      }
     audioUtils.dispose();
     _audioPlayer.dispose();
     _audioRecorder.dispose();
@@ -154,6 +171,7 @@ class TranslationController extends GetxController {
     
     try {      
       // 创建新的 StreamController 用于本次音频播放
+      audioStreamController?.close();  
       audioStreamController = StreamController<List<int>>();
       debugPrint('TranslationController: 创建新的音频流控制器');
       
@@ -185,16 +203,19 @@ class TranslationController extends GetxController {
             if (!audioStarted) {
               debugPrint('首次收到音频，开始播放流');
               audioStarted = true;
-              unawaited(audioUtils.playback(audioStreamController.stream));
+              final controller = audioStreamController;
+              if (controller != null) {
+                unawaited(audioUtils.playback(controller.stream));
+              }
             }
             
             debugPrint('添加音频数据到流');
-            audioStreamController.add(audioData);
+            audioStreamController?.add(audioData);
             break;
             
           case TranslationResponseType.audioEnd:
             debugPrint('收到音频结束标记，等待音频播放完成');
-            await audioStreamController.close();
+            await audioStreamController?.close();
             await audioUtils.markStreamEnd();  // 标记音频流结束
                       
             debugPrint('音频播放完成');

@@ -4,10 +4,12 @@ import 'package:noise_meter/noise_meter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 typedef OnSilenceDetectedCallback = void Function();
+typedef OnVolumeUpdateCallback = void Function(double volume);
 
 class SoundDetector {
   // MARK: - Properties
   final OnSilenceDetectedCallback onSilenceDetected;
+  final OnVolumeUpdateCallback onVolumeUpdate;
   final double silenceThreshold;
   
   NoiseMeter? _noiseMeter;
@@ -26,6 +28,7 @@ class SoundDetector {
   // MARK: - Initialization
   SoundDetector({
     required this.onSilenceDetected,
+    required this.onVolumeUpdate,
     required this.silenceThreshold,
   });
   
@@ -77,7 +80,10 @@ class SoundDetector {
   }
   
   void _processVolume(double volume) {
-    if (!_soundDetectionTimer!.isActive) return;
+    // 首先检查是否还在监听
+    if (!_soundDetectionTimer!.isActive) {
+      return;
+    }
     
     // 计算实际的时间间隔
     final now = DateTime.now();
@@ -90,21 +96,22 @@ class SoundDetector {
     final isValidSound = volume > silenceThreshold;
     debugPrint('SoundDetector: 当前音量: $volume dB，阈值: $silenceThreshold，是否有效: $isValidSound, _hasDetectedSound: $_hasDetectedSound');
     
+    // 只有在定时器活跃时才更新音量和处理声音检测
+    onVolumeUpdate(volume);
+    
     if (isValidSound) {
       _validSoundDuration += timeDiff;
       _silenceTimeAccumulator = 0;
       
       if (!_hasDetectedSound && _validSoundDuration >= _minimumValidSoundDuration) {
         _hasDetectedSound = true;
-        debugPrint('SoundDetector: 首次检测到有效声音，持续时长: $_validSoundDuration秒');
+        debugPrint('SoundDetector: 检测到有效声音');
       }
     } else if (_hasDetectedSound) {
       _silenceTimeAccumulator += timeDiff;
-      debugPrint('SoundDetector: 当前静音时长: $_silenceTimeAccumulator秒');
       
-      // 检查是否检测到足够长的静音
-      if (_silenceTimeAccumulator >= _silenceDuration.inMilliseconds / 1000) {
-        debugPrint('SoundDetector: 检测到静音，有效录音时长: $_validSoundDuration秒');
+      if (_silenceTimeAccumulator >= _silenceDuration.inMilliseconds / 1000.0) {
+        debugPrint('SoundDetector: 检测到静音');
         onSilenceDetected();
         _resetState();
       }

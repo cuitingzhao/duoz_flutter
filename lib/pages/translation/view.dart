@@ -62,22 +62,8 @@ class TranslationPage extends GetView<TranslationController> {
                         : Colors.grey.withOpacity(0.5),
                     isRecording: controller.isRecording.value,
                   )),
-                ),
-
-                // 录音控制按钮
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Obx(() => FloatingActionButton(
-                    onPressed: controller.isRecording.value
-                        ? controller.stopRecordingAndTranslate
-                        : null,
-                    backgroundColor: controller.isRecording.value
-                        ? Colors.red
-                        : Colors.grey,
-                    child: const Icon(Icons.stop),
-                  )),
-                ),
-                
+                ),            
+                            
                 // 下半部分：翻译文本
                 Expanded(
                   child: Container(

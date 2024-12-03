@@ -8,7 +8,7 @@ class WaveformPainter extends CustomPainter {
   final double phase;
 
   WaveformPainter({
-    this.amplitude = 1.0,
+    this.amplitude = 0.1,
     this.color = Colors.blue,
     this.frequency = 1.0,
     this.phase = 0.0,
@@ -19,21 +19,25 @@ class WaveformPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = 3.0;
 
     final path = Path();
+    final width = size.width;
+    final height = size.height;
+    final mid = height / 2;
+
+    // 计算实际振幅（将高度的 1/4 作为最大振幅）
+    final maxAmplitude = height / 12;
+    final actualAmplitude = maxAmplitude * amplitude;
+
     var x = 0.0;
-    final dx = size.width / 100;
+    path.moveTo(0, mid);
 
-    // 移动到起始点
-    path.moveTo(0, size.height / 2);
-
-    // 绘制波形
-    while (x < size.width) {
-      final y = size.height / 2 +
-          sin((x * frequency / size.width * 2 * pi) + phase) * amplitude * size.height / 4;
+    while (x < width) {
+      final normalizedX = x / width * 2 * pi;
+      final y = mid + sin(normalizedX * frequency + phase) * actualAmplitude;
       path.lineTo(x, y);
-      x += dx;
+      x += 1;
     }
 
     canvas.drawPath(path, paint);
@@ -55,7 +59,7 @@ class WaveformWidget extends StatefulWidget {
 
   const WaveformWidget({
     super.key,
-    this.amplitude = 1.0,
+    this.amplitude = 0.1,
     this.color = Colors.blue,
     this.isRecording = false,
   });
@@ -108,7 +112,7 @@ class _WaveformWidgetState extends State<WaveformWidget>
   Widget build(BuildContext context) {
     return CustomPaint(
       painter: WaveformPainter(
-        amplitude: widget.amplitude,
+        amplitude: widget.amplitude * 0.5,
         color: widget.color,
         phase: _phase,
         frequency: widget.isRecording ? 2.0 : 1.0,
