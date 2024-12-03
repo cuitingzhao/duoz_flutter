@@ -69,22 +69,22 @@ class AudioUtils {
     /// 播放音频流
   /// [audioStream] 是后端返回的音频数据流
   Future<void> playback(Stream<List<int>> audioStream) async {
-    debugPrint('[AudioUtils] Starting playback of audio stream');    
+    debugPrint('[AudioUtils] Starting playback of audio stream at ${DateTime.now()}');    
     
     await for (final chunk in audioStream) {
-      debugPrint('[AudioUtils] Received new chunk from stream');
+      //debugPrint('[AudioUtils] Received new chunk from stream');
       await addToQueue(chunk);
     }
-    debugPrint('[AudioUtils] Audio stream completed');
+    //debugPrint('[AudioUtils] Audio stream completed');
   }
 
   /// 添加音频数据到播放列表
   Future<void> addToQueue(List<int> audioData) async {
-    debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
+    //debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
     
     // 添加到缓冲区
     _buffer.addAll(audioData);
-    debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
+    //debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
 
     // 处理缓冲区
     if (_buffer.length >= _minBufferSize || (_isStreamEnded && _buffer.isNotEmpty)) {
@@ -100,18 +100,18 @@ class AudioUtils {
       final currentBuffer = List<int>.from(_buffer);
       _buffer.clear(); // 立即清空缓冲区，避免数据重复
 
-      debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
+      //debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
       final audioSource = Mp3StreamAudioSource(Uint8List.fromList(currentBuffer));
       
       if (_isFirstChunk) {
         _isFirstChunk = false;
-        debugPrint('[AudioUtils] Creating initial playlist');
+        //debugPrint('[AudioUtils] Creating initial playlist');
         _playlist = ConcatenatingAudioSource(children: [audioSource]);
         await audioPlayer.setAudioSource(_playlist!, preload: true);
         _isPlaying.value = true;
         await audioPlayer.play();
       } else {
-        debugPrint('[AudioUtils] Adding to existing playlist');
+        //debugPrint('[AudioUtils] Adding to existing playlist');
         await _playlist?.add(audioSource);
       }
       
@@ -123,7 +123,7 @@ class AudioUtils {
 
   /// 标记流结束并处理剩余数据
   Future<void> markStreamEnd() async {
-    debugPrint('[AudioUtils] Marking stream as ended');
+    //debugPrint('[AudioUtils] Marking stream as ended');
     _isStreamEnded = true;
     if (_buffer.isNotEmpty) {
       await _processBuffer();
@@ -141,7 +141,7 @@ class AudioUtils {
 
   /// 停止播放
   Future<void> stopPlayback() async {
-    debugPrint('[AudioUtils] Stopping playback');
+    //debugPrint('[AudioUtils] Stopping playback');
     _isPlaying.value = false;
     _isFirstChunk = true;
     await _cleanup();
@@ -174,7 +174,7 @@ class Mp3StreamAudioSource extends StreamAudioSource {
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
-    print('[Mp3StreamAudioSource] Requesting audio data from $start to $end');
+    //print('[Mp3StreamAudioSource] Requesting audio data from $start to $end');
     
     start = start ?? 0;
     end = end ?? _audioData.length;
