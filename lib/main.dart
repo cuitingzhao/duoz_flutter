@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'core/routes/app_pages.dart';
+import 'core/theme/app_theme.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized(); // 确保Flutter绑定初始化
   runApp(const MyApp());
 }
 
@@ -12,15 +13,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'DuoZ Flutter',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      initialRoute: AppPages.INITIAL,
-      getPages: AppPages.routes,
-      debugShowCheckedModeBanner: false,
+    return ScreenUtilInit(
+      designSize: const Size(375, 812), 
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return GetMaterialApp(
+          title: 'DuoZ Flutter',
+          theme: AppTheme.light(),
+          initialRoute: AppPages.INITIAL,
+          getPages: AppPages.routes,      
+        );
+      },
     );
   }
 }
