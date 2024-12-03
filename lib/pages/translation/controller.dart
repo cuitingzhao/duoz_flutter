@@ -15,7 +15,7 @@ class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
   late final AudioRecorder _audioRecorder;
   late final AudioUtils audioUtils;
-  final audioStreamController = StreamController<List<int>>();
+  late StreamController<List<int>> audioStreamController;
   final _translationService = TranslationService();
   
   // 音频状态
@@ -64,6 +64,15 @@ class TranslationController extends GetxController {
     try {
       // 初始化音频相关组件
       _audioPlayer = AudioPlayer();
+      // 监听播放器状态
+      _audioPlayer.playerStateStream.listen((state) {
+        debugPrint('播放器状态变化: ${state.processingState}');
+        if (state.processingState == ProcessingState.completed) {
+          debugPrint('音频播放完成，开始新的录音');
+          startRecording();
+        }
+      });
+      
       _audioRecorder = AudioRecorder();
       audioUtils = AudioUtils(_audioPlayer, _audioRecorder);
       
@@ -144,6 +153,9 @@ class TranslationController extends GetxController {
     bool audioStarted = false;
     
     try {      
+      // 创建新的 StreamController 用于本次音频播放
+      audioStreamController = StreamController<List<int>>();
+      debugPrint('TranslationController: 创建新的音频流控制器');
       
       await for (final response in _translationService.translateAudio(
         audioPath,
