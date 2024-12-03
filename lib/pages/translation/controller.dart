@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../data/models/language.dart';
 import '../../utils/audio_utils.dart';
-import '../../utils/noise_analyzer.dart';
 import '../../data/services/translation_service.dart';
+import '../../utils/noise_analyzer.dart';
 import 'package:record/record.dart';
+import '../../utils/sound_detector.dart';
 
 class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
@@ -29,15 +31,36 @@ class TranslationController extends GetxController {
   
   // 源语言和目标语言
   late final Language sourceLanguage;
-  late final Language targetLanguage;
+  late final Language targetLanguage;  
+  
+  // 声音检测
+  late final SoundDetector _soundDetector;
 
-  StreamSubscription<double>? _volumeSubscription;
-  //StreamSubscription<PlayerState>? _playerStateSubscription;
 
+  
   @override
   void onInit() {
     super.onInit();
-    debugPrint('TranslationController: 初始化');
+    _soundDetector = SoundDetector(
+      onSilenceDetected: () {
+        debugPrint('TranslationController: 检测到静音');
+        if (isRecording.value) {
+          stopRecordingAndTranslate();
+        }
+      },
+      silenceThreshold: NoiseAnalyzer.noiseThreshold,
+    );
+    
+    // 监听录音状态变化
+    ever(isRecording, (bool recording) {
+      debugPrint('TranslationController: 录音状态变化 - $recording');
+      if (recording) {
+        _soundDetector.startMonitoring();
+      } else {
+        _soundDetector.stopMonitoring();
+      }
+    });
+    
     try {
       // 初始化音频相关组件
       _audioPlayer = AudioPlayer();
@@ -51,21 +74,19 @@ class TranslationController extends GetxController {
       debugPrint('TranslationController: 语言设置 - 源语言: ${sourceLanguage.code}, 目标语言: ${targetLanguage.code}');  
       // 自动开始录音
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        debugPrint('TranslationController: 准备自动开始录音');
+        //debugPrint('TranslationController: 准备自动开始录音');
         await startRecording();
       });
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 初始化错误 - $e');
       debugPrint('Stack trace: $stackTrace');
-      rethrow;
     }
   }
 
   @override
   void onClose() {
-    debugPrint('TranslationController: 关闭控制器');
-    _volumeSubscription?.cancel();
-    //_playerStateSubscription?.cancel();
+    debugPrint('TranslationController: 关闭');
+    _soundDetector.dispose();    
     audioStreamController.close();
     audioUtils.dispose();
     _audioPlayer.dispose();
@@ -80,18 +101,6 @@ class TranslationController extends GetxController {
       await audioUtils.startRecording();
       isRecording.value = true;
       debugPrint('TranslationController: 录音已开始');
-      
-      // 开始监听音量
-      _volumeSubscription?.cancel();
-      _volumeSubscription = NoiseAnalyzer.volumeStream.listen(
-        (volume) {
-          currentVolume.value = volume;
-          debugPrint('TranslationController: 当前音量 - $volume');
-        },
-        onError: (error) {
-          debugPrint('TranslationController: 音量监听错误 - $error');
-        },
-      );
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 开始录音失败 - $e');
       debugPrint('Stack trace: $stackTrace');
@@ -109,8 +118,6 @@ class TranslationController extends GetxController {
       isRecording.value = false;
       
       // 停止音量监听
-      _volumeSubscription?.cancel();
-      _volumeSubscription = null;
       currentVolume.value = 0.0;
       debugPrint('TranslationController: 音量监听已停止');
       
