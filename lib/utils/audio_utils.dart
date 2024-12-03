@@ -19,14 +19,12 @@ class AudioUtils {
   ConcatenatingAudioSource? _playlist;
   List<int> _buffer = [];
   static const _minBufferSize = 12000; // 约3个块的大小
-  static const _minValidChunkSize = 1000; // 最小有效块大小
-  int _pendingChunksCount = 0;
   bool _isFirstChunk = true;
-  Timer? _bufferingDebounceTimer;  
+  Timer? _bufferingDebounceTimer;
+  bool _isStreamEnded = false;  // 新增：标记流是否结束
 
   /// 获取播放状态
   bool get isPlaying => _isPlaying.value;
-
 
   AudioUtils(this.audioPlayer, this.audioRecorder);
 
@@ -68,6 +66,18 @@ class AudioUtils {
     }
   }  
 
+    /// 播放音频流
+  /// [audioStream] 是后端返回的音频数据流
+  Future<void> playback(Stream<List<int>> audioStream) async {
+    debugPrint('[AudioUtils] Starting playback of audio stream');    
+    
+    await for (final chunk in audioStream) {
+      debugPrint('[AudioUtils] Received new chunk from stream');
+      await addToQueue(chunk);
+    }
+    debugPrint('[AudioUtils] Audio stream completed');
+  }
+
   /// 添加音频数据到播放列表
   Future<void> addToQueue(List<int> audioData) async {
     debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
@@ -76,22 +86,21 @@ class AudioUtils {
     _buffer.addAll(audioData);
     debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
 
-    // 如果是小块（可能是最后的块）或缓冲区足够大
-    if (audioData.length < _minValidChunkSize || _buffer.length >= _minBufferSize) {
-      final isLastChunk = audioData.length < _minValidChunkSize;
-      await _processBuffer(isLastChunk: isLastChunk);
+    // 处理缓冲区
+    if (_buffer.length >= _minBufferSize || (_isStreamEnded && _buffer.isNotEmpty)) {
+      await _processBuffer();
     }
   }
 
   /// 处理缓冲的音频数据
-  Future<void> _processBuffer({required bool isLastChunk}) async {
+  Future<void> _processBuffer() async {
     try {
       if (_buffer.isEmpty) return;
 
       final currentBuffer = List<int>.from(_buffer);
       _buffer.clear(); // 立即清空缓冲区，避免数据重复
 
-      debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes, isLastChunk: $isLastChunk');
+      debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
       final audioSource = Mp3StreamAudioSource(Uint8List.fromList(currentBuffer));
       
       if (_isFirstChunk) {
@@ -106,32 +115,28 @@ class AudioUtils {
         await _playlist?.add(audioSource);
       }
       
-      _pendingChunksCount++;
-      debugPrint('[AudioUtils] Total chunks processed: $_pendingChunksCount');
-      
-      if (isLastChunk) {
-        debugPrint('[AudioUtils] Processing final chunk, waiting for completion');
-        // 等待一段时间确保最后的数据被处理
-        await Future.delayed(const Duration(milliseconds: 500));
-        // 确保所有数据都被处理
-        if (_buffer.isNotEmpty) {
-          debugPrint('[AudioUtils] Processing remaining buffer: ${_buffer.length} bytes');
-          await _processBuffer(isLastChunk: true);
-        }
-      }
     } catch (e) {
       debugPrint('[AudioUtils] Error processing buffer: $e');
       rethrow;
     }
-  }  
+  }
+
+  /// 标记流结束并处理剩余数据
+  Future<void> markStreamEnd() async {
+    debugPrint('[AudioUtils] Marking stream as ended');
+    _isStreamEnded = true;
+    if (_buffer.isNotEmpty) {
+      await _processBuffer();
+    }
+  }
 
   /// 清理资源
   Future<void> _cleanup() async {
     _buffer.clear();
     await _playlist?.clear();
     _playlist = null;
-    _pendingChunksCount = 0;
-    _bufferingDebounceTimer?.cancel();    
+    _bufferingDebounceTimer?.cancel();
+    _isStreamEnded = false;
   }
 
   /// 停止播放
@@ -150,24 +155,12 @@ class AudioUtils {
     await stopPlayback();
     await audioPlayer.dispose();
     await audioRecorder.dispose();
-    _isPlaying.value = false;
-    _pendingChunksCount = 0;
+    _isPlaying.value = false;    
     _recordingPath = null;
     recordedFilePath = null;
   }
 
-  /// 播放音频流
-  /// [audioStream] 是后端返回的音频数据流
-  Future<void> playback(Stream<List<int>> audioStream) async {
-    debugPrint('[AudioUtils] Starting playback of audio stream');
-    await stopPlayback();
-    
-    await for (final chunk in audioStream) {
-      debugPrint('[AudioUtils] Received new chunk from stream');
-      await addToQueue(chunk);
-    }
-    debugPrint('[AudioUtils] Audio stream completed');
-  }
+
 
   /// 获取播放状态流
   Stream<PlayerState> get playerStateStream => audioPlayer.playerStateStream;

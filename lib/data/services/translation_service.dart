@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
-import '../models/language.dart';
 import '../../core/config/api_config.dart';
 
 class TranslationService {
@@ -109,6 +108,10 @@ class TranslationService {
                     debugPrint('收到音频开始标记');
                     yield TranslationResponse.audioStart();
                     break;
+                  case 'audio_end':
+                    debugPrint('收到音频结束标记');
+                    yield TranslationResponse.audioEnd();
+                    break;
                   case 'error':
                     final errorMsg = jsonData['message'] as String;
                     debugPrint('收到错误消息: $errorMsg');
@@ -177,6 +180,9 @@ class TranslationResponse {
   factory TranslationResponse.audioStart() => 
       TranslationResponse._(TranslationResponseType.audioStart, null);
   
+  factory TranslationResponse.audioEnd() => 
+    TranslationResponse._(TranslationResponseType.audioEnd, null);
+  
   factory TranslationResponse.error(String message) => 
       TranslationResponse._(TranslationResponseType.error, message);
 }
@@ -186,5 +192,6 @@ enum TranslationResponseType {
   translation,
   audioChunk,
   audioStart,
+  audioEnd, 
   error,
 }

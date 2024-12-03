@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
-import '../../core/errors/translation_errors.dart';
 import '../../data/models/language.dart';
 import '../../utils/audio_utils.dart';
 import '../../utils/noise_analyzer.dart';
@@ -15,6 +13,7 @@ class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
   late final AudioRecorder _audioRecorder;
   late final AudioUtils audioUtils;
+  final audioStreamController = StreamController<List<int>>();
   final _translationService = TranslationService();
   
   // 音频状态
@@ -33,7 +32,7 @@ class TranslationController extends GetxController {
   late final Language targetLanguage;
 
   StreamSubscription<double>? _volumeSubscription;
-  StreamSubscription<PlayerState>? _playerStateSubscription;
+  //StreamSubscription<PlayerState>? _playerStateSubscription;
 
   @override
   void onInit() {
@@ -49,21 +48,7 @@ class TranslationController extends GetxController {
       final args = Get.arguments as Map<String, dynamic>;
       sourceLanguage = args['sourceLanguage'] as Language;
       targetLanguage = args['targetLanguage'] as Language;
-      debugPrint('TranslationController: 语言设置 - 源语言: ${sourceLanguage.code}, 目标语言: ${targetLanguage.code}');
-
-      // 监听音频播放状态
-      _playerStateSubscription = _audioPlayer.playerStateStream.listen(
-        (state) {          
-          debugPrint('TranslationController: 播放状态变更 - playing: ${state.playing}, state: ${state.processingState}');
-          if (state.processingState == ProcessingState.completed) {            
-            debugPrint('TranslationController: 播放完成');
-          }
-        },
-        onError: (error) {
-          debugPrint('TranslationController: 播放状态监听错误 - $error');
-        },
-      );
-
+      debugPrint('TranslationController: 语言设置 - 源语言: ${sourceLanguage.code}, 目标语言: ${targetLanguage.code}');  
       // 自动开始录音
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         debugPrint('TranslationController: 准备自动开始录音');
@@ -80,7 +65,8 @@ class TranslationController extends GetxController {
   void onClose() {
     debugPrint('TranslationController: 关闭控制器');
     _volumeSubscription?.cancel();
-    _playerStateSubscription?.cancel();
+    //_playerStateSubscription?.cancel();
+    audioStreamController.close();
     audioUtils.dispose();
     _audioPlayer.dispose();
     _audioRecorder.dispose();
@@ -150,8 +136,7 @@ class TranslationController extends GetxController {
     isTranslating.value = true;
     bool audioStarted = false;
     
-    try {
-      final audioStreamController = StreamController<List<int>>();
+    try {      
       
       await for (final response in _translationService.translateAudio(
         audioPath,
@@ -188,32 +173,32 @@ class TranslationController extends GetxController {
             audioStreamController.add(audioData);
             break;
             
+          case TranslationResponseType.audioEnd:
+            debugPrint('收到音频结束标记，等待音频播放完成');
+            await audioStreamController.close();
+            await audioUtils.markStreamEnd();  // 标记音频流结束
+                      
+            debugPrint('音频播放完成');
+            break;
+            
           case TranslationResponseType.error:
-            debugPrint('收到错误: ${response.data}');
-            throw Exception(response.data);
+            final errorMsg = response.data as String;
+            debugPrint('翻译错误: $errorMsg');
+            hasError.value = true;
+            errorMessage.value = errorMsg;
+            break;
             
           case TranslationResponseType.audioStart:
             debugPrint('收到音频开始标记，等待音频数据');
             break;
         }
-      }
-      
-      debugPrint('翻译流程完成，等待音频播放完成');
-      // 添加一个小延迟，确保最后的音频块被处理
-      await Future.delayed(const Duration(milliseconds: 500));
-      // while (audioUtils.hasAudioPendingOrPlaying()) {
-      //   debugPrint('等待音频播放完成...');
-      //   await Future.delayed(const Duration(milliseconds: 100));
-      // }
-      debugPrint('音频播放完成，关闭音频流');
-      await audioStreamController.close();
-      
+      }                  
+      debugPrint('翻译过程结束');
     } catch (e) {
       debugPrint('翻译过程出错: $e');
       rethrow;
     } finally {
       isTranslating.value = false;
-      debugPrint('翻译过程结束');
     }
   }  
 
