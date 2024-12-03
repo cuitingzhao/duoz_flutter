@@ -4,12 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:record/record.dart';
 import '../../data/models/language.dart';
 import '../../utils/audio_utils.dart';
 import '../../data/services/translation_service.dart';
 import '../../utils/noise_analyzer.dart';
-import 'package:record/record.dart';
 import '../../utils/sound_detector.dart';
+import 'package:duoz_flutter/core/errors/app_error.dart';
+import 'package:duoz_flutter/core/errors/error_codes.dart';
+import 'package:duoz_flutter/core/errors/error_handler.dart';
+import 'package:duoz_flutter/core/errors/translation_errors.dart';
 
 class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
@@ -28,6 +32,7 @@ class TranslationController extends GetxController {
   final translatedText = ''.obs;
   final hasError = false.obs;
   final errorMessage = ''.obs;
+  final errorCode = ''.obs;
   
   // 源语言和目标语言
   late final Language sourceLanguage;
@@ -41,42 +46,42 @@ class TranslationController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _soundDetector = SoundDetector(
-      onSilenceDetected: () {
-        debugPrint('TranslationController: 检测到静音');
-        if (isRecording.value) {
-          stopRecordingAndTranslate();
-        }
-      },
-      onVolumeUpdate: (volume) {
-        // 计算与阈值的差值
-        final volumeDiff = volume - NoiseAnalyzer.noiseThreshold;
-        
-        if (volumeDiff <= 0) {
-          // 低于阈值时，保持一个很小的恒定值
-          currentVolume.value = 0.5;  // 5% 的基础振幅
-        } else {
-          // 高于阈值时，根据超出阈值的部分计算振幅
-          // 将超出部分映射到 5-100 的范围（保持最小 5% 的振幅）
-          final maxExcess = 80.0;  // 超出阈值 25dB 时达到最大振幅
-          final normalizedVolume = ((volumeDiff) / maxExcess * 15 + 5.0).clamp(5.0, 100.0);
-          currentVolume.value = normalizedVolume;
-        }
-      },
-      silenceThreshold: NoiseAnalyzer.noiseThreshold,
-    );
-    
-    // 监听录音状态变化
-    ever(isRecording, (bool recording) {
-      debugPrint('TranslationController: 录音状态变化 - $recording');
-      if (recording) {
-        _soundDetector.startMonitoring();
-      } else {
-        _soundDetector.stopMonitoring();
-      }
-    });
-    
     try {
+      _soundDetector = SoundDetector(
+        onSilenceDetected: () {
+          debugPrint('TranslationController: 检测到静音');
+          if (isRecording.value) {
+            stopRecordingAndTranslate();
+          }
+        },
+        onVolumeUpdate: (volume) {
+          // 计算与阈值的差值
+          final volumeDiff = volume - NoiseAnalyzer.noiseThreshold;
+          
+          if (volumeDiff <= 0) {
+            // 低于阈值时，保持一个很小的恒定值
+            currentVolume.value = 0.5;  // 5% 的基础振幅
+          } else {
+            // 高于阈值时，根据超出阈值的部分计算振幅
+            // 将超出部分映射到 5-100 的范围（保持最小 5% 的振幅）
+            final maxExcess = 80.0;  // 超出阈值 25dB 时达到最大振幅
+            final normalizedVolume = ((volumeDiff) / maxExcess * 15 + 5.0).clamp(5.0, 100.0);
+            currentVolume.value = normalizedVolume;
+          }
+        },
+        silenceThreshold: NoiseAnalyzer.noiseThreshold,
+      );
+      
+      // 监听录音状态变化
+      ever(isRecording, (bool recording) {
+        debugPrint('TranslationController: 录音状态变化 - $recording');
+        if (recording) {
+          _soundDetector.startMonitoring();
+        } else {
+          _soundDetector.stopMonitoring();
+        }
+      });
+      
       // 初始化音频相关组件
       _audioPlayer = AudioPlayer();
       // 监听播放器状态
@@ -96,6 +101,7 @@ class TranslationController extends GetxController {
       sourceLanguage = args['sourceLanguage'] as Language;
       targetLanguage = args['targetLanguage'] as Language;
       debugPrint('TranslationController: 语言设置 - 源语言: ${sourceLanguage.code}, 目标语言: ${targetLanguage.code}');  
+      
       // 自动开始录音
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         //debugPrint('TranslationController: 准备自动开始录音');
@@ -104,6 +110,8 @@ class TranslationController extends GetxController {
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 初始化错误 - $e');
       debugPrint('Stack trace: $stackTrace');
+      final error = e is AppError ? e : ErrorHandler.createError(AppErrorCode.audioInitializationFailed, e);
+      ErrorHandler.handleError(error, stackTrace);
     }
   }
 
@@ -126,11 +134,16 @@ class TranslationController extends GetxController {
     try {
       await audioUtils.startRecording();
       isRecording.value = true;
+      hasError.value = false;
+      errorMessage.value = '';
+      errorCode.value = '';
       debugPrint('TranslationController: 录音已开始');
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 开始录音失败 - $e');
       debugPrint('Stack trace: $stackTrace');
       isRecording.value = false;
+      final error = e is AppError ? e : ErrorHandler.createError(AppErrorCode.audioRecordingFailed, e);
+      ErrorHandler.handleError(error, stackTrace);
       rethrow;
     }
   }
@@ -150,26 +163,36 @@ class TranslationController extends GetxController {
       if (audioPath != null) {
         await translateRecordedAudio(audioPath);
       } else {
-        debugPrint('TranslationController: 没有录音文件生成');
+        throw ErrorHandler.createError(AppErrorCode.audioRecordingFailed, '没有录音文件生成');
       }
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 停止录音或翻译过程出错 - $e');
       debugPrint('Stack trace: $stackTrace');
       isRecording.value = false;
       isTranslating.value = false;
+      
+      final error = e is AppError ? e : ErrorHandler.createError(AppErrorCode.unknown, e);
+      ErrorHandler.handleError(error, stackTrace);
+      
       hasError.value = true;
-      errorMessage.value = e.toString();
-      rethrow;
+      errorMessage.value = error.message;
+      if (error is AppError) {
+        errorCode.value = error.code.toString();
+      } else {
+        errorCode.value = AppErrorCode.unknown.toString();
+      }
     }
   }
 
-  // 音频翻译
   Future<void> translateRecordedAudio(String audioPath) async {
     debugPrint('TranslationController: 开始翻译录音');
     isTranslating.value = true;
     bool audioStarted = false;
+    hasError.value = false;
+    errorMessage.value = '';
+    errorCode.value = '';
     
-    try {      
+    try {
       // 创建新的 StreamController 用于本次音频播放
       audioStreamController?.close();  
       audioStreamController = StreamController<List<int>>();
@@ -222,24 +245,48 @@ class TranslationController extends GetxController {
             break;
             
           case TranslationResponseType.error:
-            final errorMsg = response.data as String;
-            debugPrint('翻译错误: $errorMsg');
+            final error = response.data;
+            String errorMessage;
+            String errorCode;
+            
+            if (error is AppError) {
+              errorMessage = error.message;
+              errorCode = error.code.toString();
+            } else if (error is String) {
+              errorMessage = error;
+              errorCode = AppErrorCode.unknown.toString();
+            } else {
+              errorMessage = '未知错误';
+              errorCode = AppErrorCode.unknown.toString();
+            }
+            
+            debugPrint('翻译错误: $errorMessage');
             hasError.value = true;
-            errorMessage.value = errorMsg;
+            this.errorMessage.value = errorMessage;
+            this.errorCode.value = errorCode;
             break;
             
           case TranslationResponseType.audioStart:
             debugPrint('收到音频开始标记，等待音频数据');
             break;
         }
-      }                  
-      debugPrint('翻译过程结束');
-    } catch (e) {
-      debugPrint('翻译过程出错: $e');
-      rethrow;
+      }
+    } catch (e, stackTrace) {
+      debugPrint('TranslationController: 翻译过程出错 - $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      final error = e is AppError ? e : ErrorHandler.createError(AppErrorCode.translationFailed, e);
+      ErrorHandler.handleError(error, stackTrace);
+      
+      hasError.value = true;
+      errorMessage.value = error.message;
+      if (error is AppError) {
+        errorCode.value = error.code.toString();
+      } else {
+        errorCode.value = AppErrorCode.unknown.toString();
+      }
     } finally {
       isTranslating.value = false;
     }
-  }  
-
+  }
 }

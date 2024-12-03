@@ -4,8 +4,8 @@ import 'package:noise_meter/noise_meter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import '../core/error/error_handler.dart';
-import '../core/error/error_codes.dart';
+import '../core/errors/error_codes.dart';
+import '../core/errors/error_handler.dart';
 
 class NoiseAnalyzer {
   static const Duration ANALYSIS_DURATION = Duration(seconds: 3);
@@ -40,8 +40,7 @@ class NoiseAnalyzer {
     NoiseMeter? noiseMeter;
     StreamSubscription<NoiseReading>? subscription;
     final completer = Completer<void>();
-    Timer? analysisTimer;
-    double maxDb = 0;
+    Timer? analysisTimer;    
     
     try {
       // 检查麦克风权限

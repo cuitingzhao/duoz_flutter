@@ -21,126 +21,104 @@ class TranslationPage extends GetView<TranslationController> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
+      body: Obx(() {
+        if (controller.hasError.value) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 上半部分：转录文本
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16.0),
-                    alignment: Alignment.center,
-                    child: Obx(() {
-                      if (controller.isTranslating.value) {
-                        return const CupertinoActivityIndicator(
-                          radius: 12,
-                        );
-                      }
-                      return Text(
-                        controller.transcription.value,
-                        style: const TextStyle(
-                          fontSize: 24.0,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black87,
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      );
-                    }),
-                  ),
+                Icon(Icons.error_outline, size: 48, color: Colors.red),
+                SizedBox(height: 16),
+                Text(
+                  controller.errorMessage.value,
+                  style: TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
                 ),
-                
-                // 波形图
-                Container(
-                  height: 120,
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Obx(() => WaveformWidget(
-                    amplitude: controller.currentVolume.value,
-                    color: controller.isRecording.value 
-                        ? Colors.blue 
-                        : Colors.grey.withOpacity(0.5),
-                    isRecording: controller.isRecording.value,
-                  )),
-                ),            
-                            
-                // 下半部分：翻译文本
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16.0),
-                    alignment: Alignment.center,
-                    child: Obx(() {
-                      if (controller.isTranslating.value) {
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        controller.translatedText.value,
-                        style: const TextStyle(
-                          fontSize: 24.0,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black87,
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      );
-                    }),
-                  ),
+                SizedBox(height: 8),
+                Text(
+                  '错误代码: ${controller.errorCode.value}',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => controller.startRecording(),
+                  child: Text('重试'),
                 ),
               ],
             ),
-            
-            // 错误提示
-            Positioned(
-              bottom: 16.0,
-              left: 16.0,
-              right: 16.0,
-              child: Obx(() {
-                if (!controller.hasError.value) return const SizedBox.shrink();
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(
-                      color: Colors.red.shade200,
-                      width: 1.0,
+          );
+        }
+        return SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  // 上半部分：转录文本
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16.0),
+                      alignment: Alignment.center,
+                      child: Obx(() {
+                        if (controller.isTranslating.value) {
+                          return const CupertinoActivityIndicator(
+                            radius: 12,
+                          );
+                        }
+                        return Text(
+                          controller.transcription.value,
+                          style: const TextStyle(
+                            fontSize: 24.0,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      }),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        color: Colors.red.shade700,
-                      ),
-                      const SizedBox(width: 8.0),
-                      Expanded(
-                        child: Text(
-                          controller.errorMessage.value,
-                          style: TextStyle(
-                            color: Colors.red.shade700,
-                            fontSize: 14.0,
+                  
+                  // 波形图
+                  Container(
+                    height: 120,
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Obx(() => WaveformWidget(
+                      amplitude: controller.currentVolume.value,
+                      color: controller.isRecording.value 
+                          ? Colors.blue 
+                          : Colors.grey.withOpacity(0.5),
+                      isRecording: controller.isRecording.value,
+                    )),
+                  ),            
+                              
+                  // 下半部分：翻译文本
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16.0),
+                      alignment: Alignment.center,
+                      child: Obx(() {
+                        if (controller.isTranslating.value) {
+                          return const SizedBox.shrink();
+                        }
+                        return Text(
+                          controller.translatedText.value,
+                          style: const TextStyle(
+                            fontSize: 24.0,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                            height: 1.5,
                           ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => controller.hasError.value = false,
-                        color: Colors.red.shade700,
-                        iconSize: 20.0,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+                          textAlign: TextAlign.center,
+                        );
+                      }),
+                    ),
                   ),
-                );
-              }),
-            ),
-          ],
-        ),
-      ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 }

@@ -14,5 +14,5 @@ class AppError implements Exception {
   });
 
   @override
-  String toString() => 'AppError: [$code] $message';
+  String toString() => '错误：$message';
 }

@@ -20,6 +20,7 @@ class ErrorMessages {
     // Translation related errors
     AppErrorCode.translationFailed: '翻译失败',
     AppErrorCode.unsupportedLanguage: '不支持的语言',
+    AppErrorCode.languageMismatch: '检测到的语言与所选语言不匹配',
     
     // Device related errors
     AppErrorCode.microphoneNotAvailable: '麦克风不可用',

@@ -4,6 +4,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import '../../core/config/api_config.dart';
+import 'package:duoz_flutter/core/errors/translation_errors.dart';
+import 'package:duoz_flutter/core/errors/app_error.dart';
+import 'package:duoz_flutter/core/errors/error_codes.dart';
+import 'package:duoz_flutter/core/errors/error_handler.dart';
 
 class TranslationService {
   final _dio = Dio();
@@ -26,7 +30,9 @@ class TranslationService {
         'audio_file': await MultipartFile.fromFile(
           audioPath,
           contentType: MediaType('audio', 'mpeg'),
-        ),
+        ).catchError((error) {
+          throw ErrorHandler.createError(AppErrorCode.fileReadFailed, error);
+        }),
         'source_language': sourceLanguage,
         'target_language': targetLanguage,
       });
@@ -42,19 +48,42 @@ class TranslationService {
             'Accept': 'multipart/x-mixed-replace; boundary=frame',
           },
         ),
-      );
+      ).catchError((error) {
+        if (error.type == DioErrorType.connectionTimeout ||
+            error.type == DioErrorType.sendTimeout ||
+            error.type == DioErrorType.receiveTimeout) {
+          throw ErrorHandler.createError(AppErrorCode.networkError, error);
+        }
+        throw ErrorHandler.createError(AppErrorCode.serverError, error);
+      });
+      
       debugPrint('收到响应流');
-
       final responseStream = response.data.stream as Stream<List<int>>;
       List<int> buffer = [];
       bool isReadingContent = false;
       int contentLength = 0;
       String? contentType;
+      String? boundary;
       
       await for (final chunk in responseStream) {
         debugPrint('收到数据块: ${chunk.length} 字节');
         buffer.addAll(chunk);
         debugPrint('当前缓冲区大小: ${buffer.length} 字节');
+        debugPrint('原始数据: ${utf8.decode(buffer, allowMalformed: true)}');
+        
+        // 如果还没找到边界，先找边界
+        if (boundary == null) {
+          final data = utf8.decode(buffer, allowMalformed: true);
+          debugPrint('尝试查找边界，当前数据: $data');
+          final boundaryMatch = RegExp(r'--([^\r\n]+)').firstMatch(data);
+          if (boundaryMatch != null) {
+            boundary = boundaryMatch.group(1);
+            debugPrint('找到边界标记: $boundary');
+          } else {
+            debugPrint('未找到边界标记，继续等待数据');
+            continue;
+          }
+        }
         
         while (buffer.isNotEmpty) {
           if (!isReadingContent) {
@@ -69,6 +98,12 @@ class TranslationService {
             final headerStr = utf8.decode(buffer.sublist(0, headerEndIndex));
             debugPrint('收到头部:\n$headerStr');
             
+            // 检查是否是结束标记
+            if (headerStr.contains('--$boundary--')) {
+              debugPrint('收到结束标记');
+              return;
+            }
+            
             // 提取 Content-Type 和 Content-Length
             final headers = parseHeaders(headerStr);
             contentType = headers['content-type'];
@@ -81,7 +116,7 @@ class TranslationService {
             isReadingContent = true;
           }
           
-          if (isReadingContent) {
+          if (isReadingContent && contentLength > 0) {
             if (buffer.length >= contentLength) {
               debugPrint('有足够的数据读取内容: ${buffer.length} >= $contentLength');
               final content = buffer.sublist(0, contentLength);
@@ -96,12 +131,12 @@ class TranslationService {
                 switch (type) {
                   case 'transcription':
                     final transcription = jsonData['data'] as String;
-                    debugPrint('收到转录文本: $transcription at ${DateTime.now()}');
+                    debugPrint('收到转录文本: $transcription');
                     yield TranslationResponse.transcription(transcription);
                     break;
                   case 'translation':
                     final translation = jsonData['data'] as String;
-                    debugPrint('收到翻译文本: $translation at ${DateTime.now()}');
+                    debugPrint('收到翻译文本: $translation');
                     yield TranslationResponse.translation(translation);
                     break;
                   case 'audio_start':
@@ -114,20 +149,51 @@ class TranslationService {
                     break;
                   case 'error':
                     final errorMsg = jsonData['message'] as String;
-                    debugPrint('收到错误消息: $errorMsg');
-                    throw Exception(errorMsg);
+                    final errorCode = jsonData['error_code'] as String? ?? 'UNKNOWN_ERROR';
+                    debugPrint('收到错误消息: $errorMsg (code: $errorCode)');
+                    
+                    AppErrorCode appErrorCode;
+                    switch (errorCode) {
+                      case 'EMPTY_TRANSCRIPTION':
+                        appErrorCode = AppErrorCode.noiseThresholdNotMet;
+                        break;
+                      case 'LANGUAGE_DETECTION_ERROR':
+                        appErrorCode = AppErrorCode.unsupportedLanguage;
+                        break;
+                      case 'LANGUAGE_MISMATCH':
+                        appErrorCode = AppErrorCode.languageMismatch;
+                        break;
+                      case 'INVALID_AUDIO_FORMAT':
+                        appErrorCode = AppErrorCode.audioInitializationFailed;
+                        break;
+                      case 'OPENAI_SERVICE_ERROR':
+                      case 'AZURE_SERVICE_ERROR':
+                        appErrorCode = AppErrorCode.translationFailed;
+                        break;
+                      default:
+                        appErrorCode = AppErrorCode.unknown;
+                    }
+                    
+                    throw ErrorHandler.createError(appErrorCode, errorMsg);
                 }
               } else if (contentType == 'audio/mpeg') {
                 debugPrint('收到MP3音频数据块: ${content.length} 字节');
                 yield TranslationResponse.audioChunk(content);
               }
               
-              // 移除已处理的内容
-              buffer = buffer.sublist(contentLength + 2); // +2 for \r\n
-              debugPrint('处理完内容后的缓冲区大小: ${buffer.length} 字节');
+              // 移除已处理的内容和尾部的 \r\n
+              final endOfContent = contentLength + 2; // +2 for \r\n
+              if (buffer.length >= endOfContent) {
+                buffer = buffer.sublist(endOfContent);
+                debugPrint('处理完内容后的缓冲区大小: ${buffer.length} 字节');
+              } else {
+                buffer = [];
+              }
               isReadingContent = false;
+              contentLength = 0;
+              contentType = null;
             } else {
-              debugPrint('等待更多数据: 当前 ${buffer.length} < 需要 $contentLength');
+              debugPrint('等待更多数据: ${buffer.length} < $contentLength');
               break;
             }
           }

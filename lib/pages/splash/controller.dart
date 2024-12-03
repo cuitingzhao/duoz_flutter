@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 import '../../utils/noise_analyzer.dart';
-import '../../core/error/error_handler.dart';
+import '../../core/errors/error_handler.dart';
 import '../../core/routes/app_pages.dart';
 
 class SplashController extends GetxController {
