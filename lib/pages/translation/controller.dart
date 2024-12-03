@@ -201,10 +201,10 @@ class TranslationController extends GetxController {
       debugPrint('翻译流程完成，等待音频播放完成');
       // 添加一个小延迟，确保最后的音频块被处理
       await Future.delayed(const Duration(milliseconds: 500));
-      while (audioUtils.hasAudioPendingOrPlaying()) {
-        debugPrint('等待音频播放完成...');
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
+      // while (audioUtils.hasAudioPendingOrPlaying()) {
+      //   debugPrint('等待音频播放完成...');
+      //   await Future.delayed(const Duration(milliseconds: 100));
+      // }
       debugPrint('音频播放完成，关闭音频流');
       await audioStreamController.close();
       
