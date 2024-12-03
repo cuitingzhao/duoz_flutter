@@ -18,6 +18,12 @@ class NoiseAnalyzer {
   // 当前环境噪音阈值
   static double noiseThreshold = MODERATE_THRESHOLD;
   
+  // 音量流控制器
+  static final _volumeController = StreamController<double>.broadcast();
+  
+  // 音量流
+  static Stream<double> get volumeStream => _volumeController.stream;
+  
   // 获取环境描述
   static String getEnvironmentDescription() {
     if (noiseThreshold <= QUIET_THRESHOLD) {
@@ -35,6 +41,7 @@ class NoiseAnalyzer {
     StreamSubscription<NoiseReading>? subscription;
     final completer = Completer<void>();
     Timer? analysisTimer;
+    double maxDb = 0;
     
     try {
       // 检查麦克风权限
@@ -85,17 +92,12 @@ class NoiseAnalyzer {
             if (noiseReading != null && noiseReading.maxDecibel > 0) {  // 过滤无效值
               debugPrint('收到噪音数据: ${noiseReading.maxDecibel} dB');
               noiseReadings.add(noiseReading.maxDecibel);
+              _volumeController.add(noiseReading.maxDecibel / 100); // 将分贝值转换为0-1之间的值
             }
           },
-          onError: (error) {
-            debugPrint('噪音监听错误: $error');
-            _cleanupResources(subscription, analysisTimer);
-            if (!completer.isCompleted) {
-              completer.completeError(ErrorHandler.createError(
-                AppErrorCode.noiseAnalysisFailed,
-                error,
-              ));
-            }
+          onError: (e) {
+            debugPrint('噪音监听错误: $e');
+            completer.completeError(e);
           },
           cancelOnError: true,
         );
