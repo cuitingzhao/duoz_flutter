@@ -14,6 +14,7 @@ import 'package:duoz_flutter/core/errors/app_error.dart';
 import 'package:duoz_flutter/core/errors/error_codes.dart';
 import 'package:duoz_flutter/core/errors/error_handler.dart';
 import 'package:duoz_flutter/core/errors/translation_errors.dart';
+import '../../utils/system_sound.dart';
 
 class TranslationController extends GetxController {
   late final AudioPlayer _audioPlayer;
@@ -41,7 +42,11 @@ class TranslationController extends GetxController {
   // 声音检测
   late final SoundDetector _soundDetector;
 
+  // 提示音控制
+  final audioStarted = false.obs;
 
+  // 音频播放状态
+  final isAudioPlaybackStarted = false.obs;
   
   @override
   void onInit() {
@@ -122,6 +127,7 @@ class TranslationController extends GetxController {
       if (audioStreamController != null) {
         audioStreamController!.close();
       }
+    SystemSound.stopSound();
     audioUtils.dispose();
     _audioPlayer.dispose();
     _audioRecorder.dispose();
@@ -186,13 +192,16 @@ class TranslationController extends GetxController {
 
   Future<void> translateRecordedAudio(String audioPath) async {
     debugPrint('TranslationController: 开始翻译录音');
-    isTranslating.value = true;
-    bool audioStarted = false;
+    isTranslating.value = true;    
     hasError.value = false;
     errorMessage.value = '';
     errorCode.value = '';
     
     try {
+      // 播放等待提示音（非阻塞）
+      audioStarted.value = true;
+      SystemSound.playWaitingSound();
+      
       // 创建新的 StreamController 用于本次音频播放
       audioStreamController?.close();  
       audioStreamController = StreamController<List<int>>();
@@ -203,6 +212,11 @@ class TranslationController extends GetxController {
         sourceLanguage.code,
         targetLanguage.code,
       )) {
+        // 收到第一个响应时停止提示音
+        if (audioStarted.value) {
+          await SystemSound.stopSound();
+          audioStarted.value = false;
+        }
         debugPrint('收到翻译响应，类型: ${response.type}');
         isTranslating.value = false;
         
@@ -223,24 +237,25 @@ class TranslationController extends GetxController {
             final audioData = response.data as List<int>;
             debugPrint('收到音频数据块，大小: ${audioData.length}字节');
             
-            if (!audioStarted) {
-              debugPrint('首次收到音频，开始播放流');
-              audioStarted = true;
-              final controller = audioStreamController;
-              if (controller != null) {
+            final controller = audioStreamController;
+            if (controller != null) {
+              // 如果是第一次收到音频数据，启动播放
+              if (!isAudioPlaybackStarted.value) {
+                debugPrint('首次收到音频，开始播放流');
+                isAudioPlaybackStarted.value = true;
                 unawaited(audioUtils.playback(controller.stream));
               }
+              
+              debugPrint('添加音频数据到流');
+              controller.add(audioData);
             }
-            
-            debugPrint('添加音频数据到流');
-            audioStreamController?.add(audioData);
             break;
             
           case TranslationResponseType.audioEnd:
             debugPrint('收到音频结束标记，等待音频播放完成');
             await audioStreamController?.close();
             await audioUtils.markStreamEnd();  // 标记音频流结束
-                      
+            isAudioPlaybackStarted.value = false;  // 重置播放状态
             debugPrint('音频播放完成');
             break;
             
