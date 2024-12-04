@@ -69,7 +69,7 @@ class TranslationService {
         debugPrint('收到数据块: ${chunk.length} 字节');
         buffer.addAll(chunk);
         debugPrint('当前缓冲区大小: ${buffer.length} 字节');
-        debugPrint('原始数据: ${utf8.decode(buffer, allowMalformed: true)}');
+        // debugPrint('原始数据: ${utf8.decode(buffer, allowMalformed: true)}');
         
         // 如果还没找到边界，先找边界
         if (boundary == null) {
