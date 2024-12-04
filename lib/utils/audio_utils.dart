@@ -136,6 +136,17 @@ class AudioUtils {
       _buffer.clear(); // 立即清空缓冲区，避免数据重复
 
       debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
+      // 检查小块数据的内容
+      if (currentBuffer.length <= 36) {
+        debugPrint('[AudioUtils] Small buffer content (hex): ${currentBuffer.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        // 如果数据块太小，直接跳过
+        debugPrint('[AudioUtils] Skipping small buffer chunk');
+        return;
+      }
+      
+      debugPrint('[AudioUtils] Current player state: ${audioPlayer.processingState}');
+      debugPrint('[AudioUtils] Is stream ended: $_isStreamEnded');
+      
       final audioSource = Mp3StreamAudioSource(Uint8List.fromList(currentBuffer));
       
       if (_isFirstChunk) {
@@ -145,6 +156,9 @@ class AudioUtils {
         await audioPlayer.setAudioSource(_playlist!, preload: true);
       } else {
         debugPrint('[AudioUtils] Adding to existing playlist');
+        if (_playlist != null) {
+          debugPrint('[AudioUtils] Current playlist length: ${_playlist!.length}');
+        }
         await _playlist?.add(audioSource);
       }
       
@@ -163,9 +177,14 @@ class AudioUtils {
 
   /// 标记流结束并处理剩余数据
   Future<void> markStreamEnd() async {
-    //debugPrint('[AudioUtils] Marking stream as ended');
+    debugPrint('[AudioUtils] Marking stream as ended. Current player state: ${audioPlayer.processingState}');
+    debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
+    if (_playlist != null) {
+      debugPrint('[AudioUtils] Current playlist length: ${_playlist!.length}');
+    }
     _isStreamEnded = true;
     if (_buffer.isNotEmpty) {
+      debugPrint('[AudioUtils] Processing final buffer');
       await _processBuffer();
     }
   }
