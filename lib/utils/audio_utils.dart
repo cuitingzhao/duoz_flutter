@@ -26,7 +26,39 @@ class AudioUtils {
   /// 获取播放状态
   bool get isPlaying => _isPlaying.value;
 
-  AudioUtils(this.audioPlayer, this.audioRecorder);
+  AudioUtils(this.audioPlayer, this.audioRecorder) {
+    // 监听播放器状态
+    _playerStateSubscription = audioPlayer.playerStateStream.listen((state) {
+      debugPrint('[AudioUtils] Player state changed: ${state.processingState}');
+      
+      switch (state.processingState) {
+        case ProcessingState.completed:
+          if (!_isStreamEnded) {
+            // 如果流还没结束，说明是缓冲区播放完了，但还有数据在传输
+            debugPrint('[AudioUtils] Playlist completed but stream not ended');
+            _isPlaying.value = false;
+            // 重置播放器，准备播放下一个音频块
+            _resetPlayer();
+          } else {
+            debugPrint('[AudioUtils] Stream ended and playback completed');
+            _isPlaying.value = false;
+          }
+          break;
+        case ProcessingState.buffering:
+          debugPrint('[AudioUtils] Buffering audio...');
+          break;
+        case ProcessingState.ready:
+          if (!_isPlaying.value && !_isStreamEnded) {
+            debugPrint('[AudioUtils] Player ready, starting playback');
+            audioPlayer.play();
+            _isPlaying.value = true;
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
 
   /// 初始化录音机
   Future<void> _initRecorder() async {
@@ -49,8 +81,11 @@ class AudioUtils {
       await audioRecorder.start(const RecordConfig(
         encoder: AudioEncoder.wav,    // 使用WAV编码器
         bitRate: 128000,              // 128kbps
-        sampleRate: 44100,            // 44.1kHz
-        numChannels: 1,               // 单声道
+        sampleRate: 44100,            // 44.1kHz采样率
+        numChannels: 1,               // 使用单声道录音，可以减少干扰
+        autoGain: true,               // 启用自动增益控制
+        echoCancel: true,             // 启用回声消除
+        noiseSuppress: true,          // 启用噪音抑制
       ), path: _recordingPath!);
     } catch (e) {
       rethrow;
@@ -100,18 +135,16 @@ class AudioUtils {
       final currentBuffer = List<int>.from(_buffer);
       _buffer.clear(); // 立即清空缓冲区，避免数据重复
 
-      //debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
+      debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
       final audioSource = Mp3StreamAudioSource(Uint8List.fromList(currentBuffer));
       
       if (_isFirstChunk) {
         _isFirstChunk = false;
-        //debugPrint('[AudioUtils] Creating initial playlist');
+        debugPrint('[AudioUtils] Creating initial playlist');
         _playlist = ConcatenatingAudioSource(children: [audioSource]);
         await audioPlayer.setAudioSource(_playlist!, preload: true);
-        _isPlaying.value = true;
-        await audioPlayer.play();
       } else {
-        //debugPrint('[AudioUtils] Adding to existing playlist');
+        debugPrint('[AudioUtils] Adding to existing playlist');
         await _playlist?.add(audioSource);
       }
       
@@ -119,6 +152,13 @@ class AudioUtils {
       debugPrint('[AudioUtils] Error processing buffer: $e');
       rethrow;
     }
+  }
+
+  /// 重置播放器状态
+  Future<void> _resetPlayer() async {
+    _isFirstChunk = true;
+    await _playlist?.clear();
+    _playlist = null;
   }
 
   /// 标记流结束并处理剩余数据
