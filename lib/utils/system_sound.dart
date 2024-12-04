@@ -15,17 +15,23 @@ class SystemSound {
     try {
       final session = await audio_session.AudioSession.instance;
       await session.configure(const audio_session.AudioSessionConfiguration(
-        avAudioSessionCategory: audio_session.AVAudioSessionCategory.ambient,
+        // iOS: 使用 playback 类别以支持后台播放
+        avAudioSessionCategory: audio_session.AVAudioSessionCategory.playback,
+        // 允许混音
         avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
+        // Android: 使用提示音配置
         androidAudioAttributes: audio_session.AndroidAudioAttributes(
-          contentType: audio_session.AndroidAudioContentType.sonification,
-          usage: audio_session.AndroidAudioUsage.notificationCommunicationInstant,
+          contentType: audio_session.AndroidAudioContentType.music,
+          usage: audio_session.AndroidAudioUsage.game,
         ),
-        androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
+        androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gainTransientMayDuck,
       ));
       _initialized = true;
-    } catch (e) {
+      debugPrint('音频会话初始化成功');
+    } catch (e, stackTrace) {
       debugPrint('初始化音频会话失败: $e');
+      debugPrint('Stack trace: $stackTrace');
+      _initialized = false;
     }
   }
   
@@ -33,12 +39,24 @@ class SystemSound {
   static Future<void> playWaitingSound() async {
     try {
       await _initAudioSession();
-      // 循环播放
+      
+      // 确保音频文件存在
+      final source = AssetSource('audios/loading.wav');
+      debugPrint('准备播放音频: ${source.path}');
+      
+      // 设置循环播放
       await _player.setReleaseMode(ReleaseMode.loop);
-      // 非阻塞播放
-      _player.play(AssetSource('audios/loading.wav'), volume: 1);
-    } catch (e) {
+      // 设置音量
+      await _player.setVolume(0.5);  // 降低音量以避免干扰
+      
+      // 播放音频
+      await _player.play(source);
+      debugPrint('开始播放等待提示音');
+    } catch (e, stackTrace) {
       debugPrint('播放等待提示音失败: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // 重置播放器状态
+      await _player.stop().catchError((e) => debugPrint('停止播放失败: $e'));
     }
   }
 
@@ -46,14 +64,23 @@ class SystemSound {
   static Future<void> stopSound() async {
     try {
       await _player.stop();
-    } catch (e) {
+      debugPrint('停止播放提示音');
+    } catch (e, stackTrace) {
       debugPrint('停止提示音失败: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
   }
 
   /// 释放资源
   static Future<void> dispose() async {
-    await _player.dispose();
-    _initialized = false;
+    try {
+      await stopSound();
+      await _player.dispose();
+      _initialized = false;
+      debugPrint('释放音频资源完成');
+    } catch (e, stackTrace) {
+      debugPrint('释放音频资源失败: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
   }
 }
