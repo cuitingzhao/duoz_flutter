@@ -94,7 +94,7 @@ class SoundDetector {
     
     // 检查是否是有效声音
     final isValidSound = volume > silenceThreshold;
-    debugPrint('SoundDetector: 当前音量: $volume dB，阈值: $silenceThreshold，是否有效: $isValidSound, _hasDetectedSound: $_hasDetectedSound');
+    // debugPrint('SoundDetector: 当前音量: $volume dB，阈值: $silenceThreshold，是否有效: $isValidSound, _hasDetectedSound: $_hasDetectedSound');
     
     // 只有在定时器活跃时才更新音量和处理声音检测
     onVolumeUpdate(volume);
