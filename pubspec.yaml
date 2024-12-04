@@ -49,6 +49,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   audio_session: ^0.1.21
 
+  # Screen adaptation
+  flutter_screenutil: ^5.9.0
+
+  # Text auto size
+  auto_size_text: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

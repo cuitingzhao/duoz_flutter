@@ -18,7 +18,7 @@ class AudioUtils {
   // 音频源管理
   ConcatenatingAudioSource? _playlist;
   List<int> _buffer = [];
-  static const _minBufferSize = 12000; // 约3个块的大小
+  static const _minBufferSize = 8000; // 约3个块的大小
   bool _isFirstChunk = true;
   Timer? _bufferingDebounceTimer;
   bool _isStreamEnded = false;  // 新增：标记流是否结束
@@ -48,7 +48,8 @@ class AudioUtils {
           debugPrint('[AudioUtils] Buffering audio...');
           break;
         case ProcessingState.ready:
-          if (!_isPlaying.value && !_isStreamEnded) {
+          print("_isPlaying.value: ${_isPlaying.value}, _isStreamEnded:  ${_isStreamEnded}");
+          if (!_isPlaying.value) {
             debugPrint('[AudioUtils] Player ready, starting playback');
             audioPlayer.play();
             _isPlaying.value = true;
