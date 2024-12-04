@@ -49,9 +49,9 @@ class TranslationService {
           },
         ),
       ).catchError((error) {
-        if (error.type == DioErrorType.connectionTimeout ||
-            error.type == DioErrorType.sendTimeout ||
-            error.type == DioErrorType.receiveTimeout) {
+        if (error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.sendTimeout ||
+            error.type == DioExceptionType.receiveTimeout) {
           throw ErrorHandler.createError(AppErrorCode.networkError, error);
         }
         throw ErrorHandler.createError(AppErrorCode.serverError, error);
@@ -69,7 +69,14 @@ class TranslationService {
         debugPrint('收到数据块: ${chunk.length} 字节');
         buffer.addAll(chunk);
         debugPrint('当前缓冲区大小: ${buffer.length} 字节');
-        debugPrint('原始数据: ${utf8.decode(buffer, allowMalformed: true)}');
+        
+        // 打印前100个字节的十六进制和ASCII表示
+        final previewSize = buffer.length > 100 ? 100 : buffer.length;
+        final hexView = buffer.sublist(0, previewSize).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        final asciiView = buffer.sublist(0, previewSize).map((b) => b >= 32 && b <= 126 ? String.fromCharCode(b) : '.').join('');
+        debugPrint('数据预览 (前$previewSize字节):');
+        debugPrint('HEX: $hexView');
+        debugPrint('ASCII: $asciiView');
         
         // 如果还没找到边界，先找边界
         if (boundary == null) {
@@ -86,7 +93,7 @@ class TranslationService {
         }
         
         while (buffer.isNotEmpty) {
-          if (!isReadingContent) {
+          if (!isReadingContent) {            
             // 查找头部结束标记
             final headerEndIndex = findSequence(buffer, utf8.encode('\r\n\r\n'));
             if (headerEndIndex == -1) {
