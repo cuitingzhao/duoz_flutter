@@ -33,16 +33,8 @@ class AudioUtils {
       
       switch (state.processingState) {
         case ProcessingState.completed:
-          if (!_isStreamEnded) {
-            // 如果流还没结束，说明是缓冲区播放完了，但还有数据在传输
-            debugPrint('[AudioUtils] Playlist completed but stream not ended');
-            _isPlaying.value = false;
-            // 重置播放器，准备播放下一个音频块
-            _resetPlayer();
-          } else {
-            debugPrint('[AudioUtils] Stream ended and playback completed');
-            _isPlaying.value = false;
-          }
+          _isPlaying.value = false;     
+          _resetPlayer();
           break;
         case ProcessingState.buffering:
           debugPrint('[AudioUtils] Buffering audio...');
@@ -108,19 +100,19 @@ class AudioUtils {
     debugPrint('[AudioUtils] Starting playback of audio stream at ${DateTime.now()}');    
     
     await for (final chunk in audioStream) {
-      //debugPrint('[AudioUtils] Received new chunk from stream');
+      debugPrint('[AudioUtils] Received new chunk from stream');
       await addToQueue(chunk);
     }
-    //debugPrint('[AudioUtils] Audio stream completed');
+    debugPrint('[AudioUtils] Audio stream completed');
   }
 
   /// 添加音频数据到播放列表
   Future<void> addToQueue(List<int> audioData) async {
-    //debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
+    debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
     
     // 添加到缓冲区
     _buffer.addAll(audioData);
-    //debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
+    debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
 
     // 处理缓冲区
     if (_buffer.length >= _minBufferSize || (_isStreamEnded && _buffer.isNotEmpty)) {
@@ -183,7 +175,7 @@ class AudioUtils {
     if (_playlist != null) {
       debugPrint('[AudioUtils] Current playlist length: ${_playlist!.length}');
     }
-    _isStreamEnded = true;
+    _isStreamEnded = true;    
     if (_buffer.isNotEmpty) {
       debugPrint('[AudioUtils] Processing final buffer');
       await _processBuffer();
@@ -201,9 +193,9 @@ class AudioUtils {
 
   /// 停止播放
   Future<void> stopPlayback() async {
-    //debugPrint('[AudioUtils] Stopping playback');
+    debugPrint('[AudioUtils] Stopping playback');
     _isPlaying.value = false;
-    _isFirstChunk = true;
+    
     await _cleanup();
     await _playerStateSubscription?.cancel();
     _playerStateSubscription = null;
