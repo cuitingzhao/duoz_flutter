@@ -2,21 +2,22 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
-import 'package:record/record.dart';
+import 'package:just_audio/just_audio.dart' as just_audio;
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
 /// 音频工具类，专注于音频录制和播放的底层操作
 class AudioUtils {
-  final AudioPlayer audioPlayer;
-  final AudioRecorder audioRecorder;
+  final just_audio.AudioPlayer audioPlayer;
+  final FlutterSoundRecorder _soundRecorder;  
   String? _recordingPath;
   final _isPlaying = ValueNotifier<bool>(false);
-  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<just_audio.PlayerState>? _playerStateSubscription;
   
   // 音频源管理
-  ConcatenatingAudioSource? _playlist;
+  just_audio.ConcatenatingAudioSource? _playlist;
   List<int> _buffer = [];
   static const _minBufferSize = 8000; // 约3个块的大小
   bool _isFirstChunk = true;
@@ -30,28 +31,25 @@ class AudioUtils {
   // String? get recordingPath => _recordingPath;
 
 
-  AudioUtils(this.audioPlayer, this.audioRecorder) {
+  AudioUtils(this.audioPlayer, this._soundRecorder) {
     // 监听播放器状态
     _playerStateSubscription = audioPlayer.playerStateStream.listen((state) {
-      debugPrint('[AudioUtils] Player state changed: ${state.processingState}');
-      debugPrint('[AudioUtils] Current volume: ${audioPlayer.volume}');
+      //debugPrint('[AudioUtils] Player state changed: ${state.processingState}');
+      //debugPrint('[AudioUtils] Current volume: ${audioPlayer.volume}');
       
       switch (state.processingState) {
-        case ProcessingState.completed:
+        case just_audio.ProcessingState.completed:
           _isPlaying.value = false;     
-          _resetPlayer();
+          _resetPlayer();                    
           break;
-        case ProcessingState.buffering:
-          debugPrint('[AudioUtils] Buffering audio...');
+        case just_audio.ProcessingState.buffering:
+          // debugPrint('[AudioUtils] Buffering audio...');
           break;
-        case ProcessingState.ready:
-          print("_isPlaying.value: ${_isPlaying.value}, _isStreamEnded:  ${_isStreamEnded}");
+        case just_audio.ProcessingState.ready:
+          // print("_isPlaying.value: ${_isPlaying.value}, _isStreamEnded:  ${_isStreamEnded}");
           if (!_isPlaying.value) {
-            debugPrint('[AudioUtils] Player ready, starting playback');
-            audioPlayer.setVolume(1.0).then((_) {
-              debugPrint('[AudioUtils] Volume set to 1.0');
-              audioPlayer.play();
-            });
+            // debugPrint('[AudioUtils] Player ready, starting playback');
+            audioPlayer.play();            
             _isPlaying.value = true;
           }
           break;
@@ -63,10 +61,13 @@ class AudioUtils {
 
   /// 初始化录音机
   Future<void> _initRecorder() async {
-    final hasPermission = await audioRecorder.hasPermission();
-    if (!hasPermission) {
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
       throw Exception('Microphone permission not granted');
     }
+    
+    await _soundRecorder.openRecorder();
+    await _soundRecorder.setSubscriptionDuration(const Duration(milliseconds: 10));
   }
 
   /// 开始录音
@@ -78,25 +79,24 @@ class AudioUtils {
       final dir = await getTemporaryDirectory();
       _recordingPath = path.join(dir.path, 'audio_${DateTime.now().millisecondsSinceEpoch}.wav');
       
-      // 配置录音参数
-      await audioRecorder.start(const RecordConfig(
-        encoder: AudioEncoder.wav,    // 使用WAV编码器
-        bitRate: 128000,              // 128kbps
-        sampleRate: 44100,            // 44.1kHz采样率
-        numChannels: 1,               // 使用单声道录音，可以减少干扰
-        autoGain: true,               // 启用自动增益控制
-        echoCancel: true,             // 启用回声消除
-        noiseSuppress: true,          // 启用噪音抑制
-      ), path: _recordingPath!);
+      // 配置录音参数并开始录音
+      await _soundRecorder.startRecorder(
+        toFile: _recordingPath,
+        codec: Codec.pcm16WAV,
+        sampleRate: 44100,
+        numChannels: 1,
+      );
     } catch (e) {
+      debugPrint('[AudioUtils] Error starting recording: $e');
       rethrow;
     }
   }
 
   /// 停止录音
   Future<String?> stopRecording() async {
-    try {
-      return await audioRecorder.stop();
+    try {      
+      _recordingPath = await _soundRecorder.stopRecorder();
+      return _recordingPath;
     } catch (e) {
       debugPrint('[AudioUtils] Error stopping recording: $e');
       rethrow;
@@ -106,22 +106,22 @@ class AudioUtils {
     /// 播放音频流
   /// [audioStream] 是后端返回的音频数据流
   Future<void> playback(Stream<List<int>> audioStream) async {
-    debugPrint('[AudioUtils] Starting playback of audio stream at ${DateTime.now()}');    
+    // debugPrint('[AudioUtils] Starting playback of audio stream at ${DateTime.now()}');        
     
     await for (final chunk in audioStream) {
-      debugPrint('[AudioUtils] Received new chunk from stream');
+      // debugPrint('[AudioUtils] Received new chunk from stream');
       await addToQueue(chunk);
     }
-    debugPrint('[AudioUtils] Audio stream completed');
+    //debugPrint('[AudioUtils] Audio stream completed');
   }
 
   /// 添加音频数据到播放列表
   Future<void> addToQueue(List<int> audioData) async {
-    debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
+    // debugPrint('[AudioUtils] Received chunk: ${audioData.length} bytes');
     
     // 添加到缓冲区
     _buffer.addAll(audioData);
-    debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
+    // debugPrint('[AudioUtils] Current buffer size: ${_buffer.length} bytes');
 
     // 处理缓冲区
     if (_buffer.length >= _minBufferSize || (_isStreamEnded && _buffer.isNotEmpty)) {
@@ -140,33 +140,33 @@ class AudioUtils {
       debugPrint('[AudioUtils] Processing buffer: ${currentBuffer.length} bytes');
       // 检查小块数据的内容
       if (currentBuffer.length <= 36) {
-        debugPrint('[AudioUtils] Small buffer content (hex): ${currentBuffer.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        // debugPrint('[AudioUtils] Small buffer content (hex): ${currentBuffer.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
         // 如果数据块太小，直接跳过
-        debugPrint('[AudioUtils] Skipping small buffer chunk');
+        // debugPrint('[AudioUtils] Skipping small buffer chunk');
         return;
       }
       
-      debugPrint('[AudioUtils] Current player state: ${audioPlayer.processingState}');
-      debugPrint('[AudioUtils] Is stream ended: $_isStreamEnded');
+      // debugPrint('[AudioUtils] Current player state: ${audioPlayer.processingState}');
+      // debugPrint('[AudioUtils] Is stream ended: $_isStreamEnded');
       
       final audioSource = Mp3StreamAudioSource(Uint8List.fromList(currentBuffer));
       
       if (_isFirstChunk) {
         _isFirstChunk = false;
-        debugPrint('[AudioUtils] Creating initial playlist');
-        _playlist = ConcatenatingAudioSource(children: [audioSource]);
+        // debugPrint('[AudioUtils] Creating initial playlist');
+        _playlist = just_audio.ConcatenatingAudioSource(children: [audioSource]);
         await audioPlayer.setAudioSource(_playlist!, preload: true);
         await audioPlayer.setVolume(1.0);  
       } else {
-        debugPrint('[AudioUtils] Adding to existing playlist');
+        // debugPrint('[AudioUtils] Adding to existing playlist');
         if (_playlist != null) {
-          debugPrint('[AudioUtils] Current playlist length: ${_playlist!.length}');
+          // debugPrint('[AudioUtils] Current playlist length: ${_playlist!.length}');
         }
         await _playlist?.add(audioSource);
       }
       
     } catch (e) {
-      debugPrint('[AudioUtils] Error processing buffer: $e');
+      // debugPrint('[AudioUtils] Error processing buffer: $e');
       rethrow;
     }
   }
@@ -176,7 +176,7 @@ class AudioUtils {
     _isFirstChunk = true;
     await _playlist?.clear();
     _playlist = null;
-    await audioPlayer.setVolume(1.0);  // 需要添加这一行
+    //await audioPlayer.setVolume(1.0);  // 需要添加这一行
   }
 
   /// 标记流结束并处理剩余数据
@@ -232,7 +232,7 @@ class AudioUtils {
   Future<void> dispose() async {
     await stopPlayback();
     await audioPlayer.dispose();
-    await audioRecorder.dispose();
+    await _soundRecorder.closeRecorder();
     await cleanupRecordingFile();  // 使用公开方法
     _isPlaying.value = false;
   }
@@ -240,17 +240,17 @@ class AudioUtils {
 
 
   /// 获取播放状态流
-  Stream<PlayerState> get playerStateStream => audioPlayer.playerStateStream;
+  Stream<just_audio.PlayerState> get playerStateStream => audioPlayer.playerStateStream;
 }
 
 /// 处理MP3格式的音频流
-class Mp3StreamAudioSource extends StreamAudioSource {
+class Mp3StreamAudioSource extends just_audio.StreamAudioSource {
   final List<int> _audioData;
   
   Mp3StreamAudioSource(this._audioData) : super(tag: 'Mp3StreamAudioSource');
 
   @override
-  Future<StreamAudioResponse> request([int? start, int? end]) async {
+  Future<just_audio.StreamAudioResponse> request([int? start, int? end]) async {
     //print('[Mp3StreamAudioSource] Requesting audio data from $start to $end');
     
     start = start ?? 0;
@@ -264,7 +264,7 @@ class Mp3StreamAudioSource extends StreamAudioSource {
     // 创建一个包含指定范围数据的子列表
     final subData = _audioData.sublist(offset, min(offset + count, length));
     
-    return StreamAudioResponse(
+    return just_audio.StreamAudioResponse(
       sourceLength: length,
       contentLength: subData.length,
       offset: offset,

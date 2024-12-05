@@ -1,7 +1,7 @@
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:audio_session/audio_session.dart';
 import '../../core/config/language_config.dart';
 import '../../core/routes/app_pages.dart';
 import '../../data/models/language.dart';
@@ -10,9 +10,11 @@ class HomeController extends GetxController {
   // SharedPreferences keys
   static const String _sourceLanguageKey = 'source_language_code';
   static const String _targetLanguageKey = 'target_language_code';
-  
+  // late AudioSession session;
   // 环境噪音描述
   final environmentDescription = ''.obs;
+
+  late AudioSession session;
   
   // 语言选择
   final sourceLanguage = LanguageConfig.defaultSourceLanguage.obs;
@@ -23,17 +25,24 @@ class HomeController extends GetxController {
       LanguageConfig.getAvailableTargetLanguages(sourceLanguage.value.code);
   
   @override
-  void onInit() {
+  void onInit() async {
     super.onInit();
+    session = await AudioSession.instance;    
+    await _initAudioSession();
     // 从路由参数中获取环境描述
     final description = Get.arguments?['environmentDescription'] as String?;
-    environmentDescription.value = description ?? '未知环境';
-    
+    environmentDescription.value = description ?? '未知环境';    
     // 加载保存的语言选择
     _loadSavedLanguages();
-    
+    debugPrint("初始化语音配置");
     // 初始化音频会话
-    _initAudioSession();
+    // session = await AudioSession.instance;    
+  }
+
+  @override
+  void onClose() {
+    // session.setActive(false);    
+    super.onClose();
   }
 
   // 加载保存的语言选择
@@ -60,30 +69,7 @@ class HomeController extends GetxController {
       }
     }
   }
-
-  // 初始化音频会话
-  Future<void> _initAudioSession() async {
-    try {
-      final session = await AudioSession.instance;
-      await session.configure(AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
-            AVAudioSessionCategoryOptions.defaultToSpeaker ,
-        avAudioSessionMode: AVAudioSessionMode.voicePrompt,
-        avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
-        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
-        androidAudioAttributes: const AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.speech,
-          flags: AndroidAudioFlags.none,
-          usage: AndroidAudioUsage.voiceCommunication,
-        ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-      ));
-      debugPrint('音频会话初始化成功');
-    } catch (e) {
-      debugPrint('音频会话初始化失败: $e');
-    }
-  }
+  
 
   // 保存语言选择
   Future<void> _saveLanguagePreference() async {
@@ -120,5 +106,30 @@ class HomeController extends GetxController {
         'targetLanguage': targetLanguage.value,
       },
     );
+  }
+
+  // 初始化音频会话
+  Future<void> _initAudioSession() async {
+    try {      
+      await session.configure(AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
+                  AVAudioSessionCategoryOptions.defaultToSpeaker,
+        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,          
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          flags: AndroidAudioFlags.none,
+          usage: AndroidAudioUsage.voiceCommunication,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+        androidWillPauseWhenDucked: true,
+      ));
+      await session.setActive(true);
+      debugPrint('音频会话配置完成');
+    } catch (e) {
+      debugPrint('音频会话配置失败: $e');
+    }
   }
 }
