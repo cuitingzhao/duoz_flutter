@@ -37,8 +37,11 @@ dependencies:
   # Noise detection
   noise_meter: ^5.0.2
 
+  # 音频相关
+  flutter_sound: ^9.2.13
+  permission_handler: ^10.2.0  # flutter_sound需要这个权限处理包
+
   # Audio recording and playback
-  record: ^5.0.4
   just_audio: ^0.9.36
   audioplayers: ^5.2.1
   path_provider: ^2.1.1
@@ -49,12 +52,14 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   audio_session: ^0.1.21
+  shared_preferences: ^2.2.2
 
   # Screen adaptation
   flutter_screenutil: ^5.9.0
 
   # Text auto size
   auto_size_text: ^3.0.0
+  logger: ^2.5.0
 
 dev_dependencies:
   flutter_test:
