@@ -1,5 +1,4 @@
-import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
 
 /// 系统提示音工具类
@@ -10,17 +9,18 @@ class SystemSound {
   static Future<void> playWaitingSound() async {
     try {
       // 确保音频文件存在
-      final source = AssetSource('audios/loading.wav');
-      debugPrint('准备播放音频: ${source.path}');
+      final source = AudioSource.asset('assets/audios/loading.wav');
+      // debugPrint('准备播放音频: loading.wav');
       
       // 设置循环播放
-      await _player.setReleaseMode(ReleaseMode.loop);
+      await _player.setLoopMode(LoopMode.one);
       // 设置音量
-      await _player.setVolume(0.5);  // 降低音量以避免干扰
+      await _player.setVolume(1.0);  // 进一步降低音量
       
       // 播放音频
-      await _player.play(source);
-      debugPrint('开始播放等待提示音');
+      await _player.setAudioSource(source);
+      await _player.play();
+      // debugPrint('开始播放等待提示音');
     } catch (e) {
       debugPrint('播放等待提示音失败: $e');
     }
