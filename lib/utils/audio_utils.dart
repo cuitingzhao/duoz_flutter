@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:record/record.dart';
@@ -13,7 +14,6 @@ class AudioUtils {
   String? _recordingPath;
   final _isPlaying = ValueNotifier<bool>(false);
   StreamSubscription<PlayerState>? _playerStateSubscription;
-  String? recordedFilePath;
   
   // 音频源管理
   ConcatenatingAudioSource? _playlist;
@@ -26,10 +26,15 @@ class AudioUtils {
   /// 获取播放状态
   bool get isPlaying => _isPlaying.value;
 
+  /// 获取当前录音文件路径
+  // String? get recordingPath => _recordingPath;
+
+
   AudioUtils(this.audioPlayer, this.audioRecorder) {
     // 监听播放器状态
     _playerStateSubscription = audioPlayer.playerStateStream.listen((state) {
       debugPrint('[AudioUtils] Player state changed: ${state.processingState}');
+      debugPrint('[AudioUtils] Current volume: ${audioPlayer.volume}');
       
       switch (state.processingState) {
         case ProcessingState.completed:
@@ -43,7 +48,10 @@ class AudioUtils {
           print("_isPlaying.value: ${_isPlaying.value}, _isStreamEnded:  ${_isStreamEnded}");
           if (!_isPlaying.value) {
             debugPrint('[AudioUtils] Player ready, starting playback');
-            audioPlayer.play();
+            audioPlayer.setVolume(1.0).then((_) {
+              debugPrint('[AudioUtils] Volume set to 1.0');
+              audioPlayer.play();
+            });
             _isPlaying.value = true;
           }
           break;
@@ -90,6 +98,7 @@ class AudioUtils {
     try {
       return await audioRecorder.stop();
     } catch (e) {
+      debugPrint('[AudioUtils] Error stopping recording: $e');
       rethrow;
     }
   }  
@@ -147,6 +156,7 @@ class AudioUtils {
         debugPrint('[AudioUtils] Creating initial playlist');
         _playlist = ConcatenatingAudioSource(children: [audioSource]);
         await audioPlayer.setAudioSource(_playlist!, preload: true);
+        await audioPlayer.setVolume(1.0);  
       } else {
         debugPrint('[AudioUtils] Adding to existing playlist');
         if (_playlist != null) {
@@ -162,10 +172,11 @@ class AudioUtils {
   }
 
   /// 重置播放器状态
-  Future<void> _resetPlayer() async {
+  Future<void> _resetPlayer() async {    
     _isFirstChunk = true;
     await _playlist?.clear();
     _playlist = null;
+    await audioPlayer.setVolume(1.0);  // 需要添加这一行
   }
 
   /// 标记流结束并处理剩余数据
@@ -198,8 +209,23 @@ class AudioUtils {
     
     await _cleanup();
     await _playerStateSubscription?.cancel();
-    _playerStateSubscription = null;
-    await audioPlayer.stop();
+    _playerStateSubscription = null;    
+  }
+
+  /// 清理临时录音文件
+  Future<void> cleanupRecordingFile() async {
+    try {
+      if (_recordingPath != null) {
+        final file = File(_recordingPath!);
+        if (await file.exists()) {
+          await file.delete();
+          debugPrint('[AudioUtils] Deleted temporary recording file: $_recordingPath');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AudioUtils] Error deleting recording file: $e');
+    }
+    _recordingPath = null;
   }
 
   /// 释放资源
@@ -207,9 +233,8 @@ class AudioUtils {
     await stopPlayback();
     await audioPlayer.dispose();
     await audioRecorder.dispose();
-    _isPlaying.value = false;    
-    _recordingPath = null;
-    recordedFilePath = null;
+    await cleanupRecordingFile();  // 使用公开方法
+    _isPlaying.value = false;
   }
 
 
