@@ -12,8 +12,12 @@ class NoiseAnalyzer {
   
   // 噪音级别阈值（分贝）
   static const double QUIET_THRESHOLD = 50.0;     // 安静环境
-  static const double MODERATE_THRESHOLD = 65.0;  // 正常对话
-  static const double NOISY_THRESHOLD = 80.0;     // 嘈杂环境
+  static const double MODERATE_THRESHOLD = 55.0;  // 正常对话
+  static const double NOISY_THRESHOLD = 60.0;     // 嘈杂环境
+  
+  // 滑动窗口大小
+  static const int WINDOW_SIZE = 5;
+  static List<double> _slidingWindow = [];
   
   // 当前环境噪音阈值
   static double noiseThreshold = MODERATE_THRESHOLD;
@@ -39,6 +43,7 @@ class NoiseAnalyzer {
   static Future<void> analyzeNoise() async {
     NoiseMeter? noiseMeter;
     StreamSubscription<NoiseReading>? subscription;
+    final List<double> noiseReadings = [];
     final completer = Completer<void>();
     Timer? analysisTimer;    
     
@@ -74,8 +79,8 @@ class NoiseAnalyzer {
       }
 
       debugPrint('开始噪音分析...');
-      List<double> noiseReadings = [];
-
+      
+      
       // 初始化 NoiseMeter
       try {
         noiseMeter = NoiseMeter();
@@ -87,11 +92,12 @@ class NoiseAnalyzer {
       // 开始收集噪音数据
       try {
         subscription = noiseMeter.noise.listen(
-          (noiseReading) {
+          (NoiseReading? noiseReading) {
             if (noiseReading != null && noiseReading.maxDecibel > 0) {  // 过滤无效值
-              debugPrint('收到噪音数据: ${noiseReading.maxDecibel} dB');
-              noiseReadings.add(noiseReading.maxDecibel);
-              _volumeController.add(noiseReading.maxDecibel / 100); // 将分贝值转换为0-1之间的值
+              final smoothedValue = _getSmoothedValue(noiseReading.maxDecibel);
+              noiseReadings.add(smoothedValue);
+              debugPrint('原始噪音: ${noiseReading.maxDecibel} dB, 平滑后: $smoothedValue dB');
+              _volumeController.add(smoothedValue / 100); // 将分贝值转换为0-1之间的值
             }
           },
           onError: (e) {
@@ -163,15 +169,27 @@ class NoiseAnalyzer {
 
   // 根据环境噪音设置阈值
   static void _setNoiseThreshold(double averageNoise) {
-    debugPrint('设置噪音阈值，平均噪音: $averageNoise dB');
-    if (averageNoise <= QUIET_THRESHOLD) {
+    // 应用加权因子来补偿采样偏差
+    final adjustedNoise = averageNoise * 1.2; // 增加 20% 补偿
+    debugPrint('原始平均噪音: $averageNoise dB, 调整后: $adjustedNoise dB');
+    
+    if (adjustedNoise <= QUIET_THRESHOLD) {
       noiseThreshold = QUIET_THRESHOLD;
-    } else if (averageNoise <= MODERATE_THRESHOLD) {
+    } else if (adjustedNoise <= MODERATE_THRESHOLD) {
       noiseThreshold = MODERATE_THRESHOLD;
     } else {
       noiseThreshold = NOISY_THRESHOLD;
     }
     debugPrint('最终设置的阈值: $noiseThreshold dB');
+  }
+
+  // 获取平滑后的噪音值
+  static double _getSmoothedValue(double newValue) {
+    _slidingWindow.add(newValue);
+    if (_slidingWindow.length > WINDOW_SIZE) {
+      _slidingWindow.removeAt(0);
+    }
+    return _slidingWindow.reduce((a, b) => a + b) / _slidingWindow.length;
   }
 
   // 检查麦克风权限
