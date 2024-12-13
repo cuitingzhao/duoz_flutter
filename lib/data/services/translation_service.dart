@@ -142,14 +142,6 @@ class TranslationService {
                     debugPrint('收到翻译文本: $translation');
                     yield TranslationResponse.translation(translation);
                     break;
-                  case 'audio_start':
-                    debugPrint('收到音频开始标记');
-                    yield TranslationResponse.audioStart();
-                    break;
-                  case 'audio_end':
-                    debugPrint('收到音频结束标记');
-                    yield TranslationResponse.audioEnd();
-                    break;
                   case 'error':
                     final errorMsg = jsonData['message'] as String;
                     final errorCode = jsonData['error_code'] as String? ?? 'UNKNOWN_ERROR';
@@ -180,8 +172,7 @@ class TranslationService {
                     throw ErrorHandler.createError(appErrorCode, errorMsg);
                 }
               } else if (contentType == 'audio/mpeg') {
-                debugPrint('收到MP3音频数据块: ${content.length} 字节');
-                yield TranslationResponse.audioChunk(content);
+                debugPrint('跳过音频数据，现在使用系统TTS');
               }
               
               // 移除已处理的内容和尾部的 \r\n
@@ -243,15 +234,6 @@ class TranslationResponse {
   factory TranslationResponse.translation(String text) => 
       TranslationResponse._(TranslationResponseType.translation, text);
   
-  factory TranslationResponse.audioChunk(List<int> audio) => 
-      TranslationResponse._(TranslationResponseType.audioChunk, audio);
-  
-  factory TranslationResponse.audioStart() => 
-      TranslationResponse._(TranslationResponseType.audioStart, null);
-  
-  factory TranslationResponse.audioEnd() => 
-    TranslationResponse._(TranslationResponseType.audioEnd, null);
-  
   factory TranslationResponse.error(String message) => 
       TranslationResponse._(TranslationResponseType.error, message);
 }
@@ -259,8 +241,5 @@ class TranslationResponse {
 enum TranslationResponseType {
   transcription,
   translation,
-  audioChunk,
-  audioStart,
-  audioEnd, 
   error,
 }

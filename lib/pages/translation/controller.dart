@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:just_audio/just_audio.dart' as just_audio;
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:logger/logger.dart';
 import '../../data/models/language.dart';
@@ -15,10 +14,8 @@ import 'package:duoz_flutter/core/errors/error_handler.dart';
 import '../../utils/system_sound.dart';
 
 class TranslationController extends GetxController {
-  late final just_audio.AudioPlayer _audioPlayer;
   late final FlutterSoundRecorder _audioRecorder;
   late final AudioUtils audioUtils;
-  StreamController<List<int>>? audioStreamController;
   final _translationService = TranslationService();
   final isExit = false.obs;
   
@@ -34,6 +31,9 @@ class TranslationController extends GetxController {
   final errorMessage = ''.obs;
   final errorCode = ''.obs;
   
+  // TTS状态
+  final isSpeaking = false.obs;
+  
   // 源语言和目标语言
   late final Language sourceLanguage;
   late final Language targetLanguage;  
@@ -43,26 +43,23 @@ class TranslationController extends GetxController {
 
   // 提示音控制
   final audioStarted = false.obs;
-
-  // 音频播放状态
-  final isAudioPlaybackStarted = false.obs;
   
   @override
   void onInit() async {
     super.onInit();
     
     try {
-      _audioPlayer = just_audio.AudioPlayer();
       _audioRecorder = FlutterSoundRecorder(logLevel: Level.error);
       await _audioRecorder.openRecorder();
       await _audioRecorder.setSubscriptionDuration(const Duration(milliseconds: 100));
       
-      audioUtils = AudioUtils(_audioPlayer, _audioRecorder);
+      audioUtils = AudioUtils(_audioRecorder);
       
       _soundDetector = SoundDetector(
         recorder: _audioRecorder,
         silenceThreshold: const Duration(seconds: 2),
-        onSilenceDetected: () {          
+        onSilenceDetected: () {       
+          debugPrint('TranslationController: isRecording is ${isRecording.value}');   
           if (isRecording.value) {
             stopRecordingAndTranslate();
           }
@@ -70,16 +67,7 @@ class TranslationController extends GetxController {
         onVolumeChanged: (volume) {
           currentVolume.value = volume;
         },
-      );
-      
-      // 监听播放器状态
-      _audioPlayer.playerStateStream.listen((state) {
-         // debugPrint('播放器状态变化: ${state.processingState}');
-        if (state.processingState == just_audio.ProcessingState.completed) {
-          // debugPrint('音频播放完成，开始新的录音');
-          startRecording();
-        }
-      });
+      );    
       
       // 从路由参数中获取语言设置
       final args = Get.arguments as Map<String, dynamic>;
@@ -105,12 +93,8 @@ class TranslationController extends GetxController {
     isExit.value = true;    
     debugPrint('TranslationController: 关闭');
     _soundDetector.dispose();    
-      if (audioStreamController != null) {
-        audioStreamController!.close();
-      }
     SystemSound.stopSound();    
     audioUtils.dispose();
-    _audioPlayer.dispose();
     _audioRecorder.closeRecorder();
     
     super.onClose();
@@ -118,7 +102,7 @@ class TranslationController extends GetxController {
   
   // 开始录音
   Future<void> startRecording() async {    
-    // debugPrint('TranslationController: 开始录音');
+    debugPrint('TranslationController: 开始录音');
     try {            
       await audioUtils.startRecording();
       isRecording.value = true;
@@ -126,7 +110,7 @@ class TranslationController extends GetxController {
       errorMessage.value = '';
       errorCode.value = '';
       await _soundDetector.startListening();
-      // debugPrint('TranslationController: 录音已开始');
+      debugPrint('TranslationController: 录音已开始');
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 开始录音失败 - $e');
       debugPrint('Stack trace: $stackTrace');      
@@ -184,10 +168,6 @@ class TranslationController extends GetxController {
       audioStarted.value = true;
       SystemSound.playWaitingSound();
       
-      // 创建新的 StreamController 用于本次音频播放
-      audioStreamController?.close();  
-      audioStreamController = StreamController<List<int>>();
-      // debugPrint('TranslationController: 创建新的音频流控制器');
       // 如果已经退出的话，不再调用后端
       if(isExit.value) {
         return;
@@ -219,32 +199,14 @@ class TranslationController extends GetxController {
             final text = response.data as String;
             // debugPrint('设置翻译文本: $text');
             translatedText.value = text;
-            break;
-            
-          case TranslationResponseType.audioChunk:
-            final audioData = response.data as List<int>;
-            // debugPrint('收到音频数据块，大小: ${audioData.length}字节');
-            
-            final controller = audioStreamController;
-            if (controller != null) {
-              // 如果是第一次收到音频数据，启动播放
-              if (!isAudioPlaybackStarted.value) {
-                // debugPrint('首次收到音频，开始播放流');
-                isAudioPlaybackStarted.value = true;
-                unawaited(audioUtils.playback(controller.stream));
-              }
-              
-              // debugPrint('添加音频数据到流');
-              controller.add(audioData);
+            // 使用 TTS 播放翻译文本
+            try {
+              isSpeaking.value = true;
+              await audioUtils.speak(text, targetLanguage.code);
+            } catch (e) {
+              debugPrint('TTS播放失败: $e');
+              isSpeaking.value = false;
             }
-            break;
-            
-          case TranslationResponseType.audioEnd:
-            // debugPrint('收到音频结束标记，等待音频播放完成');
-            await audioStreamController?.close();
-            await audioUtils.markStreamEnd();  // 标记音频流结束
-            isAudioPlaybackStarted.value = false;  // 重置播放状态
-            // debugPrint('音频播放完成');
             break;
             
           case TranslationResponseType.error:
@@ -268,10 +230,7 @@ class TranslationController extends GetxController {
             this.errorMessage.value = errorMessage;
             this.errorCode.value = errorCode;
             break;
-            
-          case TranslationResponseType.audioStart:
-            // debugPrint('收到音频开始标记，等待音频数据');
-            break;
+               
         }
       }
     } catch (e, stackTrace) {

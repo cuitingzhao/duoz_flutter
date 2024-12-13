@@ -42,6 +42,7 @@ class SoundDetector {
   }
 
   Future<void> startListening() async {
+    debugPrint('[SoundDetector] Start listening');
     if (_isListening) return;
     _isListening = true;
     _resetState();
@@ -52,6 +53,7 @@ class SoundDetector {
         
         // 计算并通知音量变化
         if (onVolumeChanged != null) {
+          //debugPrint('[SoundDetector] onVolumeChanged is not null');
           final normalizedVolume = _mapVolumeToAmplitude(decibels);
           onVolumeChanged!(normalizedVolume);
         }
@@ -67,6 +69,7 @@ class SoundDetector {
         final isValidSound = decibels >= NoiseAnalyzer.noiseThreshold;
         
         if (isValidSound) {
+          //debugPrint('[SoundDetector] Valid sound detected');
           _validSoundDuration += timeDiff;
           _silenceTimer?.cancel();
           _silenceTimer = null;
@@ -89,6 +92,8 @@ class SoundDetector {
             onSilenceDetected();
             _resetState();
           });
+        }else{
+          //debugPrint('[SoundDetector] No sound detected');
         }
       },
       onError: (error) {
