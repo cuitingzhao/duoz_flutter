@@ -80,6 +80,20 @@ class TranslationController extends GetxController {
         // debugPrint('TranslationController: 准备自动开始录音');
         await startRecording();
       });
+      
+      // 设置 TTS 完成回调
+      audioUtils.onTTSComplete = () {
+        debugPrint('TranslationController: TTS completed, restarting recording');
+        startRecording();
+      };
+      
+      // 设置 TTS 错误回调
+      audioUtils.onTTSError = (error) {
+        debugPrint('TranslationController: TTS error: $error');
+        hasError.value = true;
+        errorMessage.value = '语音播放失败：$error';
+        errorCode.value = AppErrorCode.audioPlaybackFailed.toString();
+      };
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 初始化错误 - $e');
       debugPrint('Stack trace: $stackTrace');
@@ -102,14 +116,23 @@ class TranslationController extends GetxController {
   
   // 开始录音
   Future<void> startRecording() async {    
-    debugPrint('TranslationController: 开始录音');
-    try {            
+    try {
+      if (audioUtils.isSpeaking) {
+        debugPrint('TranslationController: Cannot start recording while TTS is speaking');
+        return;
+      }
+      
+      if (isRecording.value) {
+        debugPrint('TranslationController: Already recording');
+        return;
+      }
+      
+      await _soundDetector.startListening();
       await audioUtils.startRecording();
       isRecording.value = true;
       hasError.value = false;
       errorMessage.value = '';
       errorCode.value = '';
-      await _soundDetector.startListening();
       debugPrint('TranslationController: 录音已开始');
     } catch (e, stackTrace) {
       debugPrint('TranslationController: 开始录音失败 - $e');
@@ -197,12 +220,14 @@ class TranslationController extends GetxController {
             
           case TranslationResponseType.translation:
             final text = response.data as String;
-            // debugPrint('设置翻译文本: $text');
+            debugPrint('设置翻译文本: $text');
             translatedText.value = text;
             // 使用 TTS 播放翻译文本
             try {
               isSpeaking.value = true;
-              await audioUtils.speak(text, targetLanguage.code);
+              final ttsLanguage = response.translatedLanguageCode ?? targetLanguage.code;
+              debugPrint('使用语言代码 $ttsLanguage 播放 TTS');
+              await audioUtils.speak(text, ttsLanguage);
             } catch (e) {
               debugPrint('TTS播放失败: $e');
               isSpeaking.value = false;

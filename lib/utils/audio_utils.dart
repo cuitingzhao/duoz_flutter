@@ -12,6 +12,12 @@ class AudioUtils {
   final FlutterSoundRecorder _soundRecorder;
   final FlutterTts _tts;
   String? _recordingPath;
+  
+  // TTS 状态回调
+  VoidCallback? onTTSComplete;
+  Function(String)? onTTSError;
+  Function(int, int)? onTTSProgress;
+  final _isSpeaking = ValueNotifier<bool>(false);
 
   AudioUtils(this._soundRecorder) : _tts = FlutterTts() {
     _initTts();
@@ -36,11 +42,21 @@ class AudioUtils {
       
       _tts.setCompletionHandler(() {
         debugPrint('[AudioUtils] TTS completed');
+        _isSpeaking.value = false;
+        onTTSComplete?.call();
       });
 
       _tts.setErrorHandler((msg) {
         debugPrint('[AudioUtils] TTS error: $msg');
+        _isSpeaking.value = false;
+        onTTSError?.call(msg);
       });
+      
+      _tts.setProgressHandler((text, start, end, word) {
+        debugPrint('[AudioUtils] TTS progress - Start: $start, End: $end, Word: $word');
+        onTTSProgress?.call(start, end);
+      });
+      
     } catch (e) {
       debugPrint('[AudioUtils] Error initializing TTS: $e');
       rethrow;
@@ -83,9 +99,17 @@ class AudioUtils {
   /// 使用 TTS 播放文本
   Future<void> speak(String text, String language) async {
     try {
+      // 如果正在播放，先停止
+      if (_isSpeaking.value) {
+        await stopSpeaking();
+      }
+      
+      debugPrint('[AudioUtils] Starting TTS for language: $language');
       await _tts.setLanguage(language);
+      _isSpeaking.value = true;
       await _tts.speak(text);
     } catch (e) {
+      _isSpeaking.value = false;
       debugPrint('[AudioUtils] Error in TTS speak: $e');
       rethrow;
     }
@@ -95,12 +119,19 @@ class AudioUtils {
   Future<void> stopSpeaking() async {
     try {
       await _tts.stop();
+      _isSpeaking.value = false;
       debugPrint('[AudioUtils] TTS stopped');
     } catch (e) {
       debugPrint('[AudioUtils] Error stopping TTS: $e');
       rethrow;
     }
   }
+  
+  /// 获取 TTS 状态
+  bool get isSpeaking => _isSpeaking.value;
+  
+  /// 获取 TTS 状态流
+  ValueNotifier<bool> get speakingState => _isSpeaking;
 
   /// 清理临时录音文件
   Future<void> cleanupRecordingFile() async {

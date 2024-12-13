@@ -139,8 +139,9 @@ class TranslationService {
                     break;
                   case 'translation':
                     final translation = jsonData['data'] as String;
-                    debugPrint('收到翻译文本: $translation');
-                    yield TranslationResponse.translation(translation);
+                    final languageCode = jsonData['translated_language_code'] as String;
+                    debugPrint('收到翻译文本: $translation, 语言代码: $languageCode');
+                    yield TranslationResponse.translation(translation, languageCode);
                     break;
                   case 'error':
                     final errorMsg = jsonData['message'] as String;
@@ -225,17 +226,18 @@ class TranslationService {
 class TranslationResponse {
   final TranslationResponseType type;
   final dynamic data;
+  final String? translatedLanguageCode;
 
-  TranslationResponse._(this.type, this.data);
+  TranslationResponse._(this.type, this.data, this.translatedLanguageCode);
 
-  factory TranslationResponse.transcription(String text) => 
-      TranslationResponse._(TranslationResponseType.transcription, text);
+  factory TranslationResponse.transcription(String text)
+      => TranslationResponse._(TranslationResponseType.transcription, text, null);
   
-  factory TranslationResponse.translation(String text) => 
-      TranslationResponse._(TranslationResponseType.translation, text);
+  factory TranslationResponse.translation(String text, String languageCode)
+      => TranslationResponse._(TranslationResponseType.translation, text, languageCode);
   
-  factory TranslationResponse.error(String message) => 
-      TranslationResponse._(TranslationResponseType.error, message);
+  factory TranslationResponse.error(String message)
+      => TranslationResponse._(TranslationResponseType.error, message, null);
 }
 
 enum TranslationResponseType {
