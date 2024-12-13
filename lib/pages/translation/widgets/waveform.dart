@@ -2,42 +2,48 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 class WaveformPainter extends CustomPainter {
-  final double amplitude;
+  final double volume;
+  final bool isRecording;
   final Color color;
-  final double frequency;
   final double phase;
+  static const double minAmplitude = 0.1;  // 最小波形振幅
+  static const double maxAmplitude = 0.8;  // 最大波形振幅
 
   WaveformPainter({
-    this.amplitude = 0.1,
-    this.color = Colors.blue,
-    this.frequency = 1.0,
-    this.phase = 0.0,
+    required this.volume,
+    required this.isRecording,
+    required this.color,
+    required this.phase,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke;
 
-    final path = Path();
     final width = size.width;
     final height = size.height;
-    final mid = height / 2;
+    final centerY = height / 2;
 
-    // 计算实际振幅（将高度的 1/4 作为最大振幅）
-    final maxAmplitude = height / 12;
-    final actualAmplitude = maxAmplitude * amplitude;
+    // 计算实际振幅（结合最小振幅）
+    final amplitude = isRecording
+        ? minAmplitude + (maxAmplitude - minAmplitude) * volume
+        : minAmplitude;
 
-    var x = 0.0;
-    path.moveTo(0, mid);
+    // 绘制波形
+    final path = Path();
+    path.moveTo(0, centerY);
 
-    while (x < width) {
-      final normalizedX = x / width * 2 * pi;
-      final y = mid + sin(normalizedX * frequency + phase) * actualAmplitude;
+    // 使用两个正弦波叠加，创造更自然的波形效果
+    for (double x = 0; x < width; x++) {
+      final normalizedX = (x / width) * 2 * pi;
+      final frequency = isRecording ? 2.0 : 1.0;
+      final y = centerY + 
+               sin(normalizedX * frequency + phase) * (height * amplitude / 2) +
+               sin(normalizedX * frequency * 1.5 + phase) * (height * amplitude / 4);
       path.lineTo(x, y);
-      x += 1;
     }
 
     canvas.drawPath(path, paint);
@@ -45,23 +51,23 @@ class WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(WaveformPainter oldDelegate) {
-    return oldDelegate.amplitude != amplitude ||
-        oldDelegate.phase != phase ||
-        oldDelegate.color != color ||
-        oldDelegate.frequency != frequency;
+    return oldDelegate.volume != volume || 
+           oldDelegate.isRecording != isRecording ||
+           oldDelegate.color != color ||
+           oldDelegate.phase != phase;
   }
 }
 
 class WaveformWidget extends StatefulWidget {
-  final double amplitude;
-  final Color color;
+  final double volume;
   final bool isRecording;
+  final Color? color;
 
   const WaveformWidget({
     super.key,
-    this.amplitude = 0.1,
-    this.color = Colors.blue,
+    this.volume = 0.0,
     this.isRecording = false,
+    this.color,
   });
 
   @override
@@ -79,27 +85,13 @@ class _WaveformWidgetState extends State<WaveformWidget>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..addListener(() {
-        setState(() {
-          _phase = _controller.value * 2 * pi;
-        });
+    )..repeat();
+
+    _controller.addListener(() {
+      setState(() {
+        _phase = _controller.value * 2 * pi;
       });
-
-    if (widget.isRecording) {
-      _controller.repeat();
-    }
-  }
-
-  @override
-  void didUpdateWidget(WaveformWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isRecording != oldWidget.isRecording) {
-      if (widget.isRecording) {
-        _controller.repeat();
-      } else {
-        _controller.stop();
-      }
-    }
+    });
   }
 
   @override
@@ -112,14 +104,14 @@ class _WaveformWidgetState extends State<WaveformWidget>
   Widget build(BuildContext context) {
     return CustomPaint(
       painter: WaveformPainter(
-        amplitude: widget.amplitude * 0.5,
-        color: widget.color,
+        volume: widget.volume,
+        isRecording: widget.isRecording,
+        color: widget.color ?? Colors.blue,
         phase: _phase,
-        frequency: widget.isRecording ? 2.0 : 1.0,
       ),
       child: const SizedBox(
         width: double.infinity,
-        height: 100,
+        height: double.infinity,
       ),
     );
   }

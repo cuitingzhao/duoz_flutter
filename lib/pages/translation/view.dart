@@ -127,11 +127,11 @@ class TranslationPage extends GetView<TranslationController> {
                     height: 120.h,
                     padding: EdgeInsets.symmetric(horizontal: 24.w),
                     child: Obx(() => WaveformWidget(
-                      amplitude: controller.currentVolume.value,
+                      isRecording: controller.isRecording.value,
+                      volume: controller.currentVolume.value,
                       color: controller.isRecording.value 
                           ? AppColors.primary
                           : AppColors.textSecondary.withOpacity(0.5),
-                      isRecording: controller.isRecording.value,
                     )),
                   ),            
                               

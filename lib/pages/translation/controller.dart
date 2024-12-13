@@ -64,9 +64,11 @@ class TranslationController extends GetxController {
         silenceThreshold: const Duration(seconds: 2),
         onSilenceDetected: () {          
           if (isRecording.value) {
-            // debugPrint('[TranslationController] Silence detected, stopping recording');
             stopRecordingAndTranslate();
           }
+        },
+        onVolumeChanged: (volume) {
+          currentVolume.value = volume;
         },
       );
       

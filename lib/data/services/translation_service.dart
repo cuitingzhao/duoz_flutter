@@ -47,10 +47,10 @@ class TranslationService {
           },
         ),
       ).catchError((error) {
-        if (error.type == DioExceptionType.connectionTimeout ||
-            error.type == DioExceptionType.sendTimeout ||
-            error.type == DioExceptionType.receiveTimeout) {
-          throw ErrorHandler.createError(AppErrorCode.networkError, error);
+          if (error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.sendTimeout ||
+              error.type == DioExceptionType.receiveTimeout) {
+            throw ErrorHandler.createError(AppErrorCode.networkError, error);
         }
         throw ErrorHandler.createError(AppErrorCode.serverError, error);
       });

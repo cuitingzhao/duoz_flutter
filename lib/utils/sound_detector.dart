@@ -5,11 +5,13 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'noise_analyzer.dart';
 
 typedef OnSilenceDetectedCallback = void Function();
+typedef OnVolumeChangedCallback = void Function(double);
 
 class SoundDetector {
   final FlutterSoundRecorder recorder;
   final Duration silenceThreshold;
   final Function() onSilenceDetected;
+  final Function(double)? onVolumeChanged;
   Timer? _silenceTimer;
   StreamSubscription<RecordingDisposition>? _recorderSubscription;
   bool _isListening = false;
@@ -21,11 +23,23 @@ class SoundDetector {
   bool _hasDetectedSound = false;                       // 是否检测到有效声音
   DateTime? _lastProcessTime;                           // 上次处理时间
 
+  // 音量映射参数
+  static const double _minDb = 30.0;  // 最小分贝值
+  static const double _maxDb = 90.0;  // 最大分贝值
+
   SoundDetector({
     required this.recorder,
     this.silenceThreshold = const Duration(seconds: 2),
     required this.onSilenceDetected,
+    this.onVolumeChanged,
   });
+
+  // 将分贝值映射到0-1范围
+  double _mapVolumeToAmplitude(double db) {
+    if (db <= _minDb) return 0.0;
+    if (db >= _maxDb) return 1.0;
+    return (db - _minDb) / (_maxDb - _minDb);
+  }
 
   Future<void> startListening() async {
     if (_isListening) return;
@@ -35,7 +49,12 @@ class SoundDetector {
     _recorderSubscription = recorder.onProgress!.listen(
       (RecordingDisposition disposition) {
         final decibels = disposition.decibels ?? 0;
-        //debugPrint('[SoundDetector] 当前音量: ${decibels.toStringAsFixed(1)} dB, 环境阈值: ${NoiseAnalyzer.noiseThreshold}');
+        
+        // 计算并通知音量变化
+        if (onVolumeChanged != null) {
+          final normalizedVolume = _mapVolumeToAmplitude(decibels);
+          onVolumeChanged!(normalizedVolume);
+        }
 
         // 计算时间间隔
         final now = DateTime.now();
