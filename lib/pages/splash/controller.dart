@@ -63,6 +63,7 @@ class SplashController extends GetxController {
       await _dio.get(baseUrl);
     } catch (e) {
       // 忽略预热失败
+      debugPrint("预热网络连接失败:$e");
     }
   }
   

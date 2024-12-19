@@ -87,7 +87,7 @@ class SoundDetector {
           }
         } else if (_hasDetectedSound && _silenceTimer == null) {
           // 只在检测到有效声音后且没有计时器时创建新的计时器
-          _silenceTimer = Timer(const Duration(milliseconds: 1500), () {
+          _silenceTimer = Timer(silenceThreshold, () {
             debugPrint('[SoundDetector] Silence detected after valid sound, valid duration: ${_validSoundDuration.toStringAsFixed(1)}s');
             onSilenceDetected();
             _resetState();

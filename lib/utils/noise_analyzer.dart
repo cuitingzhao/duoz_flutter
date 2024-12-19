@@ -11,9 +11,9 @@ class NoiseAnalyzer {
   static const Duration ANALYSIS_DURATION = Duration(seconds: 3);
   
   // 噪音级别阈值（分贝）
-  static const double QUIET_THRESHOLD = 40.0;     // 安静环境
+  static const double QUIET_THRESHOLD = 35.0;     // 安静环境
   static const double MODERATE_THRESHOLD = 45.0;  // 正常对话
-  static const double NOISY_THRESHOLD = 50.0;     // 嘈杂环境
+  static const double NOISY_THRESHOLD = 55.0;     // 嘈杂环境
   
   // 滑动窗口大小
   static const int WINDOW_SIZE = 5;
@@ -170,7 +170,7 @@ class NoiseAnalyzer {
   // 根据环境噪音设置阈值
   static void _setNoiseThreshold(double averageNoise) {
     // 应用加权因子来补偿采样偏差
-    final adjustedNoise = averageNoise * 1.2; // 增加 20% 补偿
+    final adjustedNoise = averageNoise * 1.05; // 增加 20% 补偿
     debugPrint('原始平均噪音: $averageNoise dB, 调整后: $adjustedNoise dB');
     
     if (adjustedNoise <= QUIET_THRESHOLD) {
